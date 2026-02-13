@@ -1,0 +1,32 @@
+:root {
+  color-scheme: light;
+  --bg-0: #f3f6fb;
+  --bg-1: #e6eef8;
+  --bg-2: #dce6f3;
+  --glass-fill: rgba(255, 255, 255, 0.46);
+  --glass-strong: rgba(255, 255, 255, 0.64);
+  --glass-stroke: rgba(255, 255, 255, 0.72);
+  --text-1: #0f1728;
+  --text-2: #3f4d67;
+  --text-3: #5f6b84;
+  --brand: #3276ff;
+  --brand-2: #53b4ff;
+  --mint: #2cb59d;
+  --amber: #f2a93b;
+  --danger: #e86b56;
+  --shadow-soft: 0 14px 42px rgba(26, 37, 68, 0.14);
+  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --radius-xl: 24px;
+  --radius-lg: 18px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --space-1: 0.4rem;
+  --space-2: 0.75rem;
+  --space-3: 1rem;
+  --space-4: 1.25rem;
+  --space-5: 1.75rem;
+  --font-display: 'Avenir Next', 'SF Pro Display', 'Geist', 'Fira Sans', 'PingFang SC',
+    'Hiragino Sans GB', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
+  --font-body: 'PingFang SC', 'Hiragino Sans GB', 'Source Han Sans SC', 'Fira Sans',
+    'Microsoft YaHei', sans-serif;
+}

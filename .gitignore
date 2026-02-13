@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.codex/
+.claude/
+
+# Project specific
+data/input/*.txt
+!data/input/示例小说.txt
+data/chapters/
+data/scenes/
+data/annotated/
+data/profiles/
+vector_db/
+logs/
+
+# Config with sensitive info
+config.yaml
+config.local.yaml
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Test files
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local

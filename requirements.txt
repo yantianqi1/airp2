@@ -1,0 +1,7 @@
+openai
+qdrant-client
+pyyaml
+chardet
+thefuzz
+python-Levenshtein
+tqdm

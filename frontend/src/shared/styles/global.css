@@ -1,0 +1,83 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--text-1);
+  background: radial-gradient(circle at 10% 8%, rgba(64, 137, 255, 0.16), transparent 28%),
+    radial-gradient(circle at 92% 22%, rgba(56, 208, 188, 0.15), transparent 33%),
+    radial-gradient(circle at 50% 95%, rgba(242, 169, 59, 0.11), transparent 28%),
+    linear-gradient(180deg, var(--bg-0), var(--bg-1) 55%, var(--bg-2));
+  line-height: 1.4;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(1px);
+}
+
+body::before {
+  width: min(52vw, 620px);
+  height: min(52vw, 620px);
+  top: -15vw;
+  left: -12vw;
+  background: radial-gradient(circle, rgba(61, 124, 253, 0.18), rgba(61, 124, 253, 0));
+}
+
+body::after {
+  width: min(50vw, 620px);
+  height: min(50vw, 620px);
+  right: -12vw;
+  bottom: -18vw;
+  background: radial-gradient(circle, rgba(67, 189, 160, 0.16), rgba(67, 189, 160, 0));
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+textarea {
+  color: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
