@@ -39,6 +39,10 @@ uvicorn api.rp_query_api:create_app --factory --host 0.0.0.0 --port 8011
 打开：
 - `http://localhost:8011/library`（需要先 `npm -C frontend run build` 生成 `frontend/dist`）
 
+说明：
+- 首次打开会自动以“游客模式”创建会话（cookie）。
+- 你可以在页面内注册/登录后，创建并导入“属于你账号”的小说。
+
 如果你希望前端用 Vite 开发模式运行：
 
 ```bash
@@ -48,6 +52,31 @@ npm -C frontend run dev
 
 打开：
 - `http://localhost:5173/library`
+
+### 3.1 （推荐）Docker 一镜像全栈部署
+
+项目提供单个 Docker 镜像即可同时运行后端 API + 前端静态站点（同源部署，cookie 登录可用）。
+
+1) 准备配置：
+
+```bash
+cp config.example.yaml config.yaml
+```
+
+2) 启动：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+打开：
+- `http://localhost:8011/library`
+
+数据持久化（默认）：
+- `./data`（含 SQLite：`data/airp2.sqlite3`、用户会话与小说工作区）
+- `./vector_db`
+- `./logs`
 
 ### 4. 运行测试检查
 
@@ -90,9 +119,9 @@ cat data/profiles/*.md
 ```
 
 如果你是通过“多小说工作台”处理的小说，则产物位于：
-- `data/novels/<novel_id>/chapters|scenes|annotated|profiles`
-- `vector_db/<novel_id>`
-- `logs/novels/<novel_id>/`
+- `data/users/<user_id>/novels/<novel_id>/chapters|scenes|annotated|profiles`
+- `vector_db/users/<user_id>/<novel_id>`
+- `logs/users/<user_id>/novels/<novel_id>/`
 
 ## 常用命令
 
