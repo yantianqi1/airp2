@@ -15,13 +15,13 @@ embedding:
   max_retries: 3
   retry_delay: 2
 paths:
-  input_file: data/input/小说.txt
-  chapters_dir: data/chapters
-  scenes_dir: data/scenes
-  annotated_dir: data/annotated
-  profiles_dir: data/profiles
-  vector_db_path: vector_db
-  log_dir: logs
+  input_file: /app/data/input/小说.txt
+  chapters_dir: /app/data/chapters
+  scenes_dir: /app/data/scenes
+  annotated_dir: /app/data/annotated
+  profiles_dir: /app/data/profiles
+  vector_db_path: /app/vector_db
+  log_dir: /app/logs
 chapter_split:
   patterns:
   - 第[一二三四五六七八九十百千0-9]{1,4}[章回]

@@ -19,8 +19,8 @@ class QueryUnderstandingService:
 
     def __init__(self, config: Dict):
         self.config = config
-        self.profiles_dir = config.get("paths", {}).get("profiles_dir", "data/profiles")
-        self.annotated_dir = config.get("paths", {}).get("annotated_dir", "data/annotated")
+        self.profiles_dir = config.get("paths", {}).get("profiles_dir", "/app/data/profiles")
+        self.annotated_dir = config.get("paths", {}).get("annotated_dir", "/app/data/annotated")
 
         self.intent_rules: List[Tuple[str, List[str]]] = [
             ("character_relation", ["关系", "什么关系", "谁和谁", "是否认识", "立场"]),

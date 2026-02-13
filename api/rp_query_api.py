@@ -33,7 +33,7 @@ class RPQueryService:
         self.worldbook_builder = worldbook_builder or WorldbookBuilder(
             max_facts=int(rp_cfg.get("worldbook_top_n", 8))
         )
-        self.session_store = session_store or SessionStateStore(base_dir="data/sessions")
+        self.session_store = session_store or SessionStateStore(base_dir="/app/data/sessions")
         self.guardrails = guardrails or Guardrails()
         self.llm_client = llm_client or LLMClient(config)
 

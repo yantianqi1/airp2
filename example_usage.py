@@ -279,7 +279,7 @@ def main():
         import os
         if not os.path.exists(db_path):
             print("\nError: Vector database not found!")
-            print("Please run the pipeline first: python main.py --input data/input/示例小说.txt")
+            print("Please run the pipeline first: python main.py --input /app/data/input/示例小说.txt")
             return
 
         # Run examples

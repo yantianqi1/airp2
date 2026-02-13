@@ -11,7 +11,7 @@ class ProfileRetriever:
 
     def __init__(self, config: Dict):
         self.config = config
-        self.profiles_dir = config["paths"].get("profiles_dir", "data/profiles")
+        self.profiles_dir = config["paths"].get("profiles_dir", "/app/data/profiles")
 
     def query(self, entities: List[str], top_k: int = 10) -> List[RetrievalCandidate]:
         entities = normalize_entities(entities)

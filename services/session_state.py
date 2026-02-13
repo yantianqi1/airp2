@@ -45,7 +45,7 @@ class SessionState:
 class SessionStateStore:
     """Filesystem-backed session state store."""
 
-    def __init__(self, base_dir: str = "data/sessions"):
+    def __init__(self, base_dir: str = "/app/data/sessions"):
         self.base_dir = base_dir
         os.makedirs(self.base_dir, exist_ok=True)
 

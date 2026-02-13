@@ -312,7 +312,7 @@ def _resolve_input_file(config, cli_input=None):
     if configured and os.path.exists(configured):
         return configured
 
-    sample = 'data/input/示例小说.txt'
+    sample = '/app/data/input/示例小说.txt'
     if os.path.exists(sample):
         return sample
 

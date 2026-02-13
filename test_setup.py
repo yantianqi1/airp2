@@ -78,13 +78,13 @@ def check_sample_file():
     """Check if sample novel exists."""
     print("\nChecking sample data...")
 
-    sample_file = 'data/input/示例小说.txt'
+    sample_file = '/app/data/input/示例小说.txt'
     if os.path.exists(sample_file):
         print(f"  ✓ Sample novel found: {sample_file}")
         return True
     else:
         print(f"  ✗ Sample novel not found: {sample_file}")
-        print("    Please add a novel file to data/input/")
+        print("    Please add a novel file to /app/data/input/")
         return False
 
 
