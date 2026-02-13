@@ -1,4 +1,5 @@
 """Orchestrate multi-channel retrieval and reranking."""
+import logging
 import time
 from typing import Dict, List, Optional, Tuple
 
@@ -7,6 +8,8 @@ from .models import QueryUnderstandingResult, RetrievalCandidate
 from .reranker import RetrievalReranker
 from .retrievers import FilterRetriever, ProfileRetriever, VectorRetriever
 from .session_state import SessionState
+
+logger = logging.getLogger(__name__)
 
 
 class RetrievalOrchestrator:
@@ -49,28 +52,45 @@ class RetrievalOrchestrator:
         """Execute retrieval channels and return ranked evidence with debug data."""
         start_time = time.perf_counter()
 
+        errors: Dict[str, str] = {}
+
         vector_start = time.perf_counter()
-        vector_candidates = self.vector_retriever.query(
-            query_text=query_result.normalized_query,
-            top_k=self.vector_top_k,
-            active_characters=query_result.constraints.active_characters,
-            location_hints=query_result.locations,
-            unlocked_chapter=query_result.constraints.unlocked_chapter,
-        )
+        try:
+            vector_candidates = self.vector_retriever.query(
+                query_text=query_result.normalized_query,
+                top_k=self.vector_top_k,
+                active_characters=query_result.constraints.active_characters,
+                location_hints=query_result.locations,
+                unlocked_chapter=query_result.constraints.unlocked_chapter,
+            )
+        except Exception as exc:  # pragma: no cover - runtime resilience
+            logger.exception("Vector retrieval failed: %s", exc)
+            errors["vector"] = str(exc)
+            vector_candidates = []
         vector_cost_ms = (time.perf_counter() - vector_start) * 1000
 
         filter_start = time.perf_counter()
-        filter_candidates = self.filter_retriever.query(
-            entities=query_result.entities,
-            locations=query_result.locations,
-            top_k=self.filter_top_k,
-            unlocked_chapter=query_result.constraints.unlocked_chapter,
-        )
+        try:
+            filter_candidates = self.filter_retriever.query(
+                entities=query_result.entities,
+                locations=query_result.locations,
+                top_k=self.filter_top_k,
+                unlocked_chapter=query_result.constraints.unlocked_chapter,
+            )
+        except Exception as exc:  # pragma: no cover - runtime resilience
+            logger.exception("Filter retrieval failed: %s", exc)
+            errors["filter"] = str(exc)
+            filter_candidates = []
         filter_cost_ms = (time.perf_counter() - filter_start) * 1000
 
         profile_start = time.perf_counter()
         profile_entities = query_result.entities or query_result.constraints.active_characters
-        profile_candidates = self.profile_retriever.query(profile_entities, top_k=self.profile_top_k)
+        try:
+            profile_candidates = self.profile_retriever.query(profile_entities, top_k=self.profile_top_k)
+        except Exception as exc:  # pragma: no cover - runtime resilience
+            logger.exception("Profile retrieval failed: %s", exc)
+            errors["profile"] = str(exc)
+            profile_candidates = []
         profile_cost_ms = (time.perf_counter() - profile_start) * 1000
 
         merged = self._dedupe(vector_candidates + filter_candidates + profile_candidates)
@@ -103,6 +123,7 @@ class RetrievalOrchestrator:
                 "profile": round(profile_cost_ms, 2),
                 "total": round(elapsed_ms, 2),
             },
+            "errors": errors,
         }
         return ranked, debug
 

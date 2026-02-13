@@ -1,4 +1,5 @@
 """Semantic retrieval channel backed by Qdrant vectors."""
+import logging
 from typing import Dict, List, Optional
 
 from qdrant_client import QdrantClient, models
@@ -7,6 +8,8 @@ from utils.embedding_client import EmbeddingClient
 
 from ..helpers import parse_chapter_no, shorten_text
 from ..models import RetrievalCandidate
+
+logger = logging.getLogger(__name__)
 
 
 class VectorRetriever:
@@ -22,6 +25,7 @@ class VectorRetriever:
         self.collection_name = config["vector_db"]["collection_name"]
         self.vector_db_path = config["paths"]["vector_db_path"]
         self.qdrant_client = qdrant_client or QdrantClient(path=self.vector_db_path)
+        self._owns_qdrant_client = qdrant_client is None
         self.embedding_client = embedding_client or EmbeddingClient(config)
 
     def query(
@@ -98,8 +102,56 @@ class VectorRetriever:
         if "query_filter" in kwargs:
             query_kwargs["query_filter"] = kwargs["query_filter"]
 
-        response = self.qdrant_client.query_points(**query_kwargs)
-        return list(getattr(response, "points", []) or [])
+        return self._query_points_with_retry(query_kwargs)
+
+    def _query_points_with_retry(self, query_kwargs: Dict) -> List:
+        try:
+            response = self.qdrant_client.query_points(**query_kwargs)
+            return list(getattr(response, "points", []) or [])
+        except ValueError as exc:
+            if not self._is_collection_not_found(exc):
+                raise
+
+            logger.warning(
+                "Qdrant collection '%s' not found during vector query: %s",
+                self.collection_name,
+                exc,
+            )
+
+            if self._reopen_qdrant_client():
+                try:
+                    response = self.qdrant_client.query_points(**query_kwargs)
+                    return list(getattr(response, "points", []) or [])
+                except ValueError as retry_exc:
+                    if not self._is_collection_not_found(retry_exc):
+                        raise
+                    logger.warning(
+                        "Qdrant collection '%s' still missing after reconnect; return empty vector results.",
+                        self.collection_name,
+                    )
+                    return []
+
+            logger.warning(
+                "Skip vector retrieval because collection '%s' is unavailable.",
+                self.collection_name,
+            )
+            return []
+
+    @staticmethod
+    def _is_collection_not_found(exc: ValueError) -> bool:
+        message = str(exc).lower()
+        return "collection" in message and "not found" in message
+
+    def _reopen_qdrant_client(self) -> bool:
+        if not self._owns_qdrant_client:
+            return False
+
+        try:
+            self.qdrant_client = QdrantClient(path=self.vector_db_path)
+            return True
+        except Exception as exc:  # pragma: no cover - defensive runtime guard
+            logger.warning("Failed to reopen local Qdrant client: %s", exc)
+            return False
 
     def _build_filter(
         self,

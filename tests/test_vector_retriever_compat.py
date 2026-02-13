@@ -6,6 +6,7 @@ from tests.stubs import install_dependency_stubs
 install_dependency_stubs()
 
 import services.retrieval_orchestrator as retrieval_orchestrator_module
+from services.retrievers.filter_retriever import FilterRetriever
 from services.retrievers.vector_retriever import VectorRetriever
 
 
@@ -74,6 +75,16 @@ class _QdrantSearchOnly:
                 },
             )
         ]
+
+
+class _QdrantMissingCollection:
+    def query_points(self, **kwargs):
+        raise ValueError("Collection novel_scenes not found")
+
+
+class _QdrantMissingCollectionForScroll:
+    def scroll(self, **kwargs):
+        raise ValueError("Collection novel_scenes not found")
 
 
 class _FakeVectorWithClient:
@@ -172,6 +183,32 @@ class VectorRetrieverCompatTests(unittest.TestCase):
             retrieval_orchestrator_module.FilterRetriever = original_filter_cls
 
         self.assertIs(orchestrator.filter_retriever.qdrant_client, sentinel_client)
+
+    def test_vector_retriever_returns_empty_when_collection_missing(self):
+        cfg = self._base_config()
+        retriever = VectorRetriever(
+            cfg,
+            qdrant_client=_QdrantMissingCollection(),
+            embedding_client=_FakeEmbeddingClient(),
+        )
+
+        items = retriever.query(query_text="test", top_k=5)
+        self.assertEqual(items, [])
+
+    def test_filter_retriever_returns_empty_when_collection_missing(self):
+        cfg = self._base_config()
+        retriever = FilterRetriever(
+            cfg,
+            qdrant_client=_QdrantMissingCollectionForScroll(),
+        )
+
+        items = retriever.query(
+            entities=["许七安"],
+            locations=[],
+            top_k=5,
+            unlocked_chapter=10,
+        )
+        self.assertEqual(items, [])
 
 
 if __name__ == "__main__":

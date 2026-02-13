@@ -68,6 +68,11 @@ class _FakeProfileRetriever:
         ]
 
 
+class _FailingVectorRetriever:
+    def query(self, **kwargs):
+        raise ValueError("Collection novel_scenes not found")
+
+
 class RetrievalOrchestratorTests(unittest.TestCase):
     def test_orchestrator_dedupes_and_filters_spoilers(self):
         query = QueryUnderstandingResult(
@@ -96,6 +101,30 @@ class RetrievalOrchestratorTests(unittest.TestCase):
         self.assertEqual(scene_keys.count("chapter_0001:2"), 1)
         self.assertGreaterEqual(debug["counts"]["merged"], 2)
         self.assertGreaterEqual(len(ranked), 2)
+
+    def test_orchestrator_degrades_when_channel_errors(self):
+        query = QueryUnderstandingResult(
+            intent="story_recap",
+            normalized_query="许七安和朱县令在县衙发生了什么",
+            entities=["许七安", "朱县令"],
+            locations=["县衙"],
+            event_keywords=["县衙", "问案"],
+            constraints=QueryConstraints(unlocked_chapter=10, active_characters=["许七安"]),
+        )
+        state = SessionState(session_id="s1", recent_entities=["许七安"])
+
+        orchestrator = RetrievalOrchestrator(
+            config={"paths": {"vector_db_path": "vector_db"}, "vector_db": {"collection_name": "novel_scenes"}},
+            vector_retriever=_FailingVectorRetriever(),
+            filter_retriever=_FakeFilterRetriever(),
+            profile_retriever=_FakeProfileRetriever(),
+        )
+
+        ranked, debug = orchestrator.retrieve(query, state)
+
+        self.assertGreaterEqual(len(ranked), 1)
+        self.assertEqual(debug["counts"]["vector"], 0)
+        self.assertIn("vector", debug["errors"])
 
 
 if __name__ == "__main__":

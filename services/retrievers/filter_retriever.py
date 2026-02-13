@@ -1,10 +1,13 @@
 """Structured filter retrieval channel backed by payload indexes."""
+import logging
 from typing import Dict, List, Optional
 
 from qdrant_client import QdrantClient, models
 
 from ..helpers import parse_chapter_no, shorten_text
 from ..models import RetrievalCandidate
+
+logger = logging.getLogger(__name__)
 
 
 class FilterRetriever:
@@ -15,6 +18,7 @@ class FilterRetriever:
         self.collection_name = config["vector_db"]["collection_name"]
         self.vector_db_path = config["paths"]["vector_db_path"]
         self.qdrant_client = qdrant_client or QdrantClient(path=self.vector_db_path)
+        self._owns_qdrant_client = qdrant_client is None
 
     def query(
         self,
@@ -27,13 +31,7 @@ class FilterRetriever:
         if query_filter is None:
             return []
 
-        points, _ = self.qdrant_client.scroll(
-            collection_name=self.collection_name,
-            scroll_filter=query_filter,
-            limit=top_k,
-            with_payload=True,
-            with_vectors=False,
-        )
+        points = self._scroll_with_retry(query_filter=query_filter, top_k=top_k)
 
         candidates = []
         for point in points:
@@ -88,3 +86,59 @@ class FilterRetriever:
             return None
 
         return models.Filter(should=should_conditions)
+
+    def _scroll_with_retry(self, query_filter, top_k: int):
+        kwargs = {
+            "collection_name": self.collection_name,
+            "scroll_filter": query_filter,
+            "limit": top_k,
+            "with_payload": True,
+            "with_vectors": False,
+        }
+        try:
+            points, _ = self.qdrant_client.scroll(**kwargs)
+            return points
+        except ValueError as exc:
+            if not self._is_collection_not_found(exc):
+                raise
+
+            logger.warning(
+                "Qdrant collection '%s' not found during filter query: %s",
+                self.collection_name,
+                exc,
+            )
+
+            if self._reopen_qdrant_client():
+                try:
+                    points, _ = self.qdrant_client.scroll(**kwargs)
+                    return points
+                except ValueError as retry_exc:
+                    if not self._is_collection_not_found(retry_exc):
+                        raise
+                    logger.warning(
+                        "Qdrant collection '%s' still missing after reconnect; return empty filter results.",
+                        self.collection_name,
+                    )
+                    return []
+
+            logger.warning(
+                "Skip filter retrieval because collection '%s' is unavailable.",
+                self.collection_name,
+            )
+            return []
+
+    @staticmethod
+    def _is_collection_not_found(exc: ValueError) -> bool:
+        message = str(exc).lower()
+        return "collection" in message and "not found" in message
+
+    def _reopen_qdrant_client(self) -> bool:
+        if not self._owns_qdrant_client:
+            return False
+
+        try:
+            self.qdrant_client = QdrantClient(path=self.vector_db_path)
+            return True
+        except Exception as exc:  # pragma: no cover - defensive runtime guard
+            logger.warning("Failed to reopen local Qdrant client: %s", exc)
+            return False
