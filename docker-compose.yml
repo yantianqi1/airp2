@@ -1,0 +1,12 @@
+services:
+  app:
+    image: ghcr.io/yantianqi1/airp2:latest
+    container_name: airp2
+    restart: unless-stopped
+    ports:
+      - "8011:8011"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data
+      - ./vector_db:/app/vector_db
+      - ./logs:/app/logs

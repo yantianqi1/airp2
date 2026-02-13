@@ -1,5 +1,6 @@
 """RP query service and optional FastAPI endpoints."""
 import json
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
@@ -178,6 +179,7 @@ def create_app(config_file: str = "config.yaml"):
     """Create FastAPI app lazily so dependency stays optional."""
     try:
         from fastapi import FastAPI, HTTPException
+        from fastapi.responses import FileResponse
     except ImportError as exc:  # pragma: no cover - optional runtime path
         raise RuntimeError(
             "FastAPI is not installed. Install with `pip install fastapi uvicorn`."
@@ -223,6 +225,25 @@ def create_app(config_file: str = "config.yaml"):
     @app.get("/api/v1/rp/session/{session_id}")
     def get_session(session_id: str):
         return service.get_session(session_id)
+
+    frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+    if frontend_dist.exists():
+        index_file = frontend_dist / "index.html"
+
+        @app.get("/", include_in_schema=False)
+        def serve_frontend_root():
+            return FileResponse(index_file)
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        def serve_frontend(full_path: str):
+            if full_path.startswith("api/"):
+                raise HTTPException(status_code=404, detail="Not found")
+
+            requested = (frontend_dist / full_path).resolve()
+            if requested.is_relative_to(frontend_dist) and requested.is_file():
+                return FileResponse(requested)
+
+            return FileResponse(index_file)
 
     return app
 
