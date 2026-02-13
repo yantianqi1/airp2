@@ -2,6 +2,8 @@
 import os
 import json
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.llm_client import LLMClient
 from utils.text_utils import read_text_file, find_sentence_end
 from utils.fuzzy_match import fuzzy_find_text, validate_marker_order
@@ -404,10 +406,15 @@ def run_step2(config, force=False, redo_chapter=None):
     with open(index_file, 'r', encoding='utf-8') as f:
         index_data = json.load(f)
 
-    splitter = SceneSplitter(config)
-
     # Process each chapter
     chapters = index_data['chapters']
+    chapter_by_id = {ch['chapter_id']: ch for ch in chapters}
+    concurrent_requests = max(
+        1,
+        int(config.get('llm', {}).get('concurrent_requests', 1) or 1),
+    )
+
+    targets = []
     for chapter_info in chapters:
         chapter_id = chapter_info['chapter_id']
         current_status = chapter_info.get('status')
@@ -424,25 +431,57 @@ def run_step2(config, force=False, redo_chapter=None):
             logger.info(f"Chapter {chapter_id} already processed, skipping")
             continue
 
-        # Process chapter
         chapter_file = os.path.join(chapters_dir, chapter_info['file'])
+        targets.append((chapter_id, chapter_file, chapter_info['title']))
 
-        try:
-            scenes_file = splitter.split_chapter(
-                chapter_file,
-                chapter_id,
-                chapter_info['title']
-            )
+    thread_local = threading.local()
 
-            # Update status
-            chapter_info['status'] = 'scenes_done'
-            chapter_info['scenes_file'] = os.path.basename(scenes_file)
-            # Downstream outputs become stale after re-splitting.
-            chapter_info.pop('annotated_file', None)
+    def _get_thread_splitter():
+        splitter = getattr(thread_local, 'splitter', None)
+        if splitter is None:
+            splitter = SceneSplitter(config)
+            thread_local.splitter = splitter
+        return splitter
 
-        except Exception as e:
-            logger.error(f"Failed to process chapter {chapter_id}: {e}")
-            chapter_info['status'] = 'scenes_failed'
+    def _process_one(chapter_id, chapter_file, chapter_title):
+        splitter = _get_thread_splitter()
+        scenes_file = splitter.split_chapter(chapter_file, chapter_id, chapter_title)
+        return chapter_id, os.path.basename(scenes_file)
+
+    if concurrent_requests > 1 and len(targets) > 1:
+        logger.info(
+            f"Step 2: processing {len(targets)} chapters with "
+            f"concurrent_requests={concurrent_requests}"
+        )
+        with ThreadPoolExecutor(max_workers=concurrent_requests) as executor:
+            futures = {
+                executor.submit(_process_one, cid, cfile, ctitle): cid
+                for cid, cfile, ctitle in targets
+            }
+            for future in as_completed(futures):
+                cid = futures[future]
+                chapter_info = chapter_by_id[cid]
+                try:
+                    _, scenes_file = future.result()
+                    chapter_info['status'] = 'scenes_done'
+                    chapter_info['scenes_file'] = scenes_file
+                    # Downstream outputs become stale after re-splitting.
+                    chapter_info.pop('annotated_file', None)
+                except Exception as e:
+                    logger.error(f"Failed to process chapter {cid}: {e}")
+                    chapter_info['status'] = 'scenes_failed'
+    else:
+        for cid, cfile, ctitle in targets:
+            chapter_info = chapter_by_id[cid]
+            try:
+                _, scenes_file = _process_one(cid, cfile, ctitle)
+                chapter_info['status'] = 'scenes_done'
+                chapter_info['scenes_file'] = scenes_file
+                # Downstream outputs become stale after re-splitting.
+                chapter_info.pop('annotated_file', None)
+            except Exception as e:
+                logger.error(f"Failed to process chapter {cid}: {e}")
+                chapter_info['status'] = 'scenes_failed'
 
     # Save updated index
     with open(index_file, 'w', encoding='utf-8') as f:

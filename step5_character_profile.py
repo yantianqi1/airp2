@@ -2,7 +2,9 @@
 import os
 import json
 import logging
+import threading
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.llm_client import LLMClient
 
 
@@ -16,12 +18,25 @@ class CharacterProfiler:
         """Initialize with config."""
         self.config = config
         self.llm_client = LLMClient(config)
+        self.concurrent_requests = max(
+            1,
+            int(config.get('llm', {}).get('concurrent_requests', 1) or 1),
+        )
+        self._thread_local = threading.local()
 
         self.top_n = config['character_profile']['top_n_characters']
         self.min_scenes = config['character_profile']['min_scenes']
 
         self.profiles_dir = config['paths']['profiles_dir']
         os.makedirs(self.profiles_dir, exist_ok=True)
+
+    def _get_thread_llm_client(self):
+        """Get (or create) a per-thread LLM client for concurrent calls."""
+        client = getattr(self._thread_local, 'llm_client', None)
+        if client is None:
+            client = LLMClient(self.config)
+            self._thread_local.llm_client = client
+        return client
 
     def generate_profiles(self, annotated_dir):
         """
@@ -49,15 +64,31 @@ class CharacterProfiler:
 
         # Generate profile for each character
         profile_files = []
-        for character in top_characters:
-            scenes = character_scenes[character]
-            logger.info(f"Generating profile for {character} ({len(scenes)} scenes)")
+        if self.concurrent_requests > 1 and len(top_characters) > 1:
+            with ThreadPoolExecutor(max_workers=self.concurrent_requests) as executor:
+                futures = {}
+                for character in top_characters:
+                    scenes = character_scenes[character]
+                    logger.info(f"Generating profile for {character} ({len(scenes)} scenes)")
+                    futures[
+                        executor.submit(self._generate_character_profile, character, scenes)
+                    ] = character
+                for future in as_completed(futures):
+                    character = futures[future]
+                    try:
+                        profile_files.append(future.result())
+                    except Exception as e:
+                        logger.error(f"Failed to generate profile for {character}: {e}")
+        else:
+            for character in top_characters:
+                scenes = character_scenes[character]
+                logger.info(f"Generating profile for {character} ({len(scenes)} scenes)")
 
-            try:
-                profile_file = self._generate_character_profile(character, scenes)
-                profile_files.append(profile_file)
-            except Exception as e:
-                logger.error(f"Failed to generate profile for {character}: {e}")
+                try:
+                    profile_file = self._generate_character_profile(character, scenes)
+                    profile_files.append(profile_file)
+                except Exception as e:
+                    logger.error(f"Failed to generate profile for {character}: {e}")
 
         logger.info(f"Generated {len(profile_files)} character profiles")
 
@@ -188,7 +219,8 @@ class CharacterProfiler:
 请用 Markdown 格式输出，要详细且有深度。
 """
 
-        profile_md = self.llm_client.call(
+        llm_client = self._get_thread_llm_client()
+        profile_md = llm_client.call(
             prompt=prompt,
             temperature=0.7
         )

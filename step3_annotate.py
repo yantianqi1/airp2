@@ -2,6 +2,8 @@
 import os
 import json
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.llm_client import LLMClient
 from utils.validation import validate_metadata
 
@@ -30,12 +32,25 @@ class SceneAnnotator:
         """Initialize with config."""
         self.config = config
         self.llm_client = LLMClient(config)
+        self.concurrent_requests = max(
+            1,
+            int(config.get('llm', {}).get('concurrent_requests', 1) or 1),
+        )
+        self._thread_local = threading.local()
 
         self.batch_size = config['annotation']['batch_size']
         self.short_scene_threshold = config['annotation']['short_scene_threshold']
 
         self.annotated_dir = config['paths']['annotated_dir']
         os.makedirs(self.annotated_dir, exist_ok=True)
+
+    def _get_thread_llm_client(self):
+        """Get (or create) a per-thread LLM client for concurrent calls."""
+        client = getattr(self._thread_local, 'llm_client', None)
+        if client is None:
+            client = LLMClient(self.config)
+            self._thread_local.llm_client = client
+        return client
 
     def annotate_chapter(self, scenes_file, chapter_id):
         """
@@ -56,13 +71,23 @@ class SceneAnnotator:
         # Annotate scenes in batches
         annotated_scenes = []
 
-        for i in range(0, len(scenes), self.batch_size):
-            batch = scenes[i:i + self.batch_size]
-            batch_annotations = self._annotate_batch(batch)
+        if self.concurrent_requests > 1:
+            with ThreadPoolExecutor(max_workers=self.concurrent_requests) as executor:
+                for i in range(0, len(scenes), self.batch_size):
+                    batch = scenes[i:i + self.batch_size]
+                    batch_annotations = self._annotate_batch(batch, executor=executor)
 
-            for scene, metadata in zip(batch, batch_annotations):
-                scene['metadata'] = metadata
-                annotated_scenes.append(scene)
+                    for scene, metadata in zip(batch, batch_annotations):
+                        scene['metadata'] = metadata
+                        annotated_scenes.append(scene)
+        else:
+            for i in range(0, len(scenes), self.batch_size):
+                batch = scenes[i:i + self.batch_size]
+                batch_annotations = self._annotate_batch(batch, executor=None)
+
+                for scene, metadata in zip(batch, batch_annotations):
+                    scene['metadata'] = metadata
+                    annotated_scenes.append(scene)
 
         # Normalize character names across all scenes
         annotated_scenes = self._normalize_character_names(annotated_scenes)
@@ -79,7 +104,7 @@ class SceneAnnotator:
 
         return output_file
 
-    def _annotate_batch(self, scenes):
+    def _annotate_batch(self, scenes, executor=None):
         """Annotate a batch of scenes."""
         # Check if batch can be combined (all scenes are short)
         total_chars = sum(s['char_count'] for s in scenes)
@@ -89,7 +114,22 @@ class SceneAnnotator:
             return self._annotate_batch_combined(scenes)
         else:
             # Annotate individually
-            return [self._annotate_single(scene) for scene in scenes]
+            if executor is None:
+                return [self._annotate_single(scene) for scene in scenes]
+
+            results = [None] * len(scenes)
+            futures = {
+                executor.submit(self._annotate_single, scene): idx
+                for idx, scene in enumerate(scenes)
+            }
+            for future in as_completed(futures):
+                idx = futures[future]
+                try:
+                    results[idx] = future.result()
+                except Exception as e:
+                    logger.error(f"Failed to annotate scene in parallel: {e}")
+                    results[idx] = self._get_empty_metadata()
+            return results
 
     def _annotate_single(self, scene):
         """Annotate a single scene."""
@@ -122,7 +162,8 @@ class SceneAnnotator:
 """
 
         try:
-            metadata = self.llm_client.call(
+            llm_client = self._get_thread_llm_client()
+            metadata = llm_client.call(
                 prompt=prompt,
                 model=self.config['llm']['annotate_model'],
                 response_format={"type": "json_object"}

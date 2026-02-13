@@ -349,6 +349,13 @@ llm:
   rate_limit_per_minute: 30  # 根据API限制调整
 ```
 
+### 4. 并发调用（加速场景切分/标注/角色档案）
+
+```yaml
+llm:
+  concurrent_requests: 4  # 并发请求数（仍会按 rate_limit_per_minute 做全局节流）
+```
+
 ## 常见问题
 
 ### Q: 场景覆盖率过低怎么办?

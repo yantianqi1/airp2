@@ -1,50 +1,68 @@
+# ============ 大语言模型配置 ============
 llm:
-  base_url: http://64.81.113.45:7861/v1
-  api_key: your-llm-api-key-here
-  model: gemini-3-flash-preview-medium-search
-  annotate_model: gemini-3-flash-preview-medium-search
+  base_url: "http://64.81.113.45:7861/v1"
+  api_key: "your-llm-api-key-here"
+  model: "gemini-3-flash-preview-medium-search"
+  annotate_model: "gemini-3-flash-preview-medium-search"
   max_retries: 3
   retry_delay: 2
   rate_limit_per_minute: 30
+  concurrent_requests: 1  # Step2/Step3/Step5 并发请求数
+
+# ============ 向量化模型配置 ============
 embedding:
-  base_url: https://open.bigmodel.cn/api/paas/v4
-  api_key: your-embedding-api-key-here
-  model: embedding-3
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
+  api_key: "your-embedding-api-key-here"
+  model: "embedding-3"
   dimensions: 2048
   batch_size: 50
   max_retries: 3
   retry_delay: 2
+
+# ============ 文件路径 ============
 paths:
-  input_file: /app/data/input/小说.txt
-  chapters_dir: /app/data/chapters
-  scenes_dir: /app/data/scenes
-  annotated_dir: /app/data/annotated
-  profiles_dir: /app/data/profiles
-  vector_db_path: /app/vector_db
-  log_dir: /app/logs
+  input_file: "/app/data/input/小说.txt"
+  chapters_dir: "/app/data/chapters"
+  scenes_dir: "/app/data/scenes"
+  annotated_dir: "/app/data/annotated"
+  profiles_dir: "/app/data/profiles"
+  vector_db_path: "/app/vector_db"
+  log_dir: "/app/logs"
+
+# ============ 章节拆分配置 ============
 chapter_split:
   patterns:
-  - 第[一二三四五六七八九十百千0-9]{1,4}[章回]
-  - Chapter\s+\d+
-  - 第\d+章
-  - 序章|楔子|后记|番外|尾声
+    - "第[一二三四五六七八九十百千0-9]{1,4}[章回]"
+    - "Chapter\\s+\\d+"
+    - "第\\d+章"
+    - "序章|楔子|后记|番外|尾声"
   min_chapter_length: 100
+
+# ============ 场景切分配置 ============
 scene_split:
   min_length: 400
   max_length: 1000
   target_length: 600
   coverage_threshold: 0.9
+
+# ============ 元数据标注配置 ============
 annotation:
   batch_size: 5
   short_scene_threshold: 500
+
+# ============ 向量数据库配置 ============
 vector_db:
-  collection_name: novel_scenes
-  distance_metric: Cosine
+  collection_name: "novel_scenes"
+  distance_metric: "Cosine"
+
+# ============ RP查询系统配置 ============
 rp_query:
   vector_top_k: 30
   filter_top_k: 20
   profile_top_k: 10
   worldbook_top_n: 8
+
+# ============ 角色档案配置 ============
 character_profile:
   top_n_characters: 20
   min_scenes: 5

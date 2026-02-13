@@ -2,15 +2,67 @@
 import time
 import json
 import logging
+import threading
 from openai import OpenAI
 
 
 logger = logging.getLogger(__name__)
 
 
+class _SharedRateLimiter:
+    """Thread-safe shared leaky-bucket limiter (start-time pacing).
+
+    We space out *start times* for requests. Multiple requests can still be
+    in-flight concurrently when latency exceeds the interval.
+    """
+
+    def __init__(self, rate_limit_per_minute):
+        self._lock = threading.Lock()
+        self._next_allowed_time = 0.0
+        self._interval_s = self._calc_interval(rate_limit_per_minute)
+
+    @staticmethod
+    def _calc_interval(rate_limit_per_minute):
+        if not rate_limit_per_minute:
+            return 0.0
+        if rate_limit_per_minute <= 0:
+            return 0.0
+        return 60.0 / float(rate_limit_per_minute)
+
+    def update_rate_limit(self, rate_limit_per_minute):
+        """Adopt the strictest (largest) interval seen for this limiter."""
+        new_interval = self._calc_interval(rate_limit_per_minute)
+        # 0 means "no limiting"; never relax a limiter once set.
+        if new_interval <= 0:
+            return
+        with self._lock:
+            if new_interval > self._interval_s:
+                self._interval_s = new_interval
+
+    def wait(self):
+        interval = self._interval_s
+        if interval <= 0:
+            return
+
+        with self._lock:
+            now = time.time()
+            if now < self._next_allowed_time:
+                wait_s = self._next_allowed_time - now
+                self._next_allowed_time += interval
+            else:
+                wait_s = 0.0
+                self._next_allowed_time = now + interval
+
+        if wait_s > 0:
+            time.sleep(wait_s)
+
+
 class LLMClient:
     """Client for calling LLM API."""
     _global_call_stats = {}
+    _global_call_stats_lock = threading.Lock()
+    _shared_rate_limiters = {}
+    _shared_rate_limiters_lock = threading.Lock()
 
     def __init__(self, config):
         """Initialize LLM client with config."""
@@ -29,16 +81,21 @@ class LLMClient:
 
         # Call tracking for statistics
         self.call_stats = {}
-        self.last_call_time = 0
-        self.call_interval = 60.0 / self.rate_limit if self.rate_limit > 0 else 0
+        self._rate_limiter = self._get_shared_rate_limiter(
+            key=(self.base_url, self.api_key),
+            rate_limit_per_minute=self.rate_limit,
+        )
 
-    def _rate_limit_wait(self):
-        """Wait if necessary to respect rate limits."""
-        if self.call_interval > 0:
-            elapsed = time.time() - self.last_call_time
-            if elapsed < self.call_interval:
-                time.sleep(self.call_interval - elapsed)
-        self.last_call_time = time.time()
+    @classmethod
+    def _get_shared_rate_limiter(cls, key, rate_limit_per_minute):
+        with cls._shared_rate_limiters_lock:
+            limiter = cls._shared_rate_limiters.get(key)
+            if limiter is None:
+                limiter = _SharedRateLimiter(rate_limit_per_minute)
+                cls._shared_rate_limiters[key] = limiter
+            else:
+                limiter.update_rate_limit(rate_limit_per_minute)
+            return limiter
 
     def _track_call(self, model, tokens_used):
         """Track API call statistics."""
@@ -51,13 +108,14 @@ class LLMClient:
         self.call_stats[model]['calls'] += 1
         self.call_stats[model]['tokens'] += tokens_used
 
-        if model not in LLMClient._global_call_stats:
-            LLMClient._global_call_stats[model] = {
-                'calls': 0,
-                'tokens': 0
-            }
-        LLMClient._global_call_stats[model]['calls'] += 1
-        LLMClient._global_call_stats[model]['tokens'] += tokens_used
+        with LLMClient._global_call_stats_lock:
+            if model not in LLMClient._global_call_stats:
+                LLMClient._global_call_stats[model] = {
+                    'calls': 0,
+                    'tokens': 0
+                }
+            LLMClient._global_call_stats[model]['calls'] += 1
+            LLMClient._global_call_stats[model]['tokens'] += tokens_used
 
     def call(self, prompt, model=None, temperature=0.7, response_format=None, system_prompt=None):
         """
@@ -83,7 +141,7 @@ class LLMClient:
 
         for attempt in range(self.max_retries):
             try:
-                self._rate_limit_wait()
+                self._rate_limiter.wait()
 
                 kwargs = {
                     "model": model,
@@ -154,9 +212,11 @@ class LLMClient:
     @classmethod
     def get_global_stats(cls):
         """Get call statistics aggregated across all instances."""
-        return cls._global_call_stats
+        with cls._global_call_stats_lock:
+            return dict(cls._global_call_stats)
 
     @classmethod
     def reset_global_stats(cls):
         """Reset global call statistics."""
-        cls._global_call_stats = {}
+        with cls._global_call_stats_lock:
+            cls._global_call_stats = {}

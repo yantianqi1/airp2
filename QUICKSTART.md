@@ -193,6 +193,13 @@ embedding:
   batch_size: 100      # Embedding可以用更大批量
 ```
 
+### 4. 并发调用（提升吞吐，适用于场景切分/标注/角色档案）
+
+```yaml
+llm:
+  concurrent_requests: 4  # 并发请求数（仍会按 rate_limit_per_minute 做全局节流）
+```
+
 ## 预期处理时间
 
 基于示例配置 (gpt-4o + gpt-4o-mini):
