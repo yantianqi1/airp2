@@ -28,6 +28,21 @@ paths:
   profiles_dir: "/app/data/profiles"
   vector_db_path: "/app/vector_db"
   log_dir: "/app/logs"
+  # SQLite database file used by multi-user auth/novels/jobs metadata.
+  db_path: "/app/data/airp2.sqlite3"
+
+# ============ Web / Auth ============
+web:
+  # Dev: allow Vite dev server to call API with cookies.
+  cors_origins:
+    - "http://localhost:5173"
+
+auth:
+  cookie_name: "airp_sid"
+  cookie_secure: false
+  cookie_samesite: "lax"
+  user_session_days: 30
+  guest_session_days: 30
 
 # ============ 章节拆分配置 ============
 chapter_split:

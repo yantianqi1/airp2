@@ -4,6 +4,8 @@ import { SessionEntryPage } from '../pages/SessionEntryPage';
 import { ChatPage } from '../pages/ChatPage';
 import { ChatResumePage } from '../pages/ChatResumePage';
 import { LibraryPage } from '../pages/LibraryPage';
+import { LoginPage } from '../pages/LoginPage';
+import { RegisterPage } from '../pages/RegisterPage';
 import { PipelinePage } from '../pages/PipelinePage';
 import { PipelineResumePage } from '../pages/PipelineResumePage';
 
@@ -19,6 +21,14 @@ export const router = createBrowserRouter([
       {
         path: 'library',
         element: <LibraryPage />,
+      },
+      {
+        path: 'login',
+        element: <LoginPage />,
+      },
+      {
+        path: 'register',
+        element: <RegisterPage />,
       },
       {
         path: 'session',

@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ChatBubbleIcon, LibraryIcon, PipelineIcon, PlusIcon } from '../../shared/components/icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getMe, logout } from '../../shared/api/auth';
 
 function isChatRoute(pathname: string): boolean {
   return pathname === '/chat' || pathname.startsWith('/chat/') || pathname.includes('/chat/');
@@ -41,12 +43,23 @@ export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const pathname = location.pathname;
+  const queryClient = useQueryClient();
+  const meQuery = useQuery({ queryKey: ['me'], queryFn: getMe, retry: 0 });
+  const mode = meQuery.data?.mode || 'guest';
 
   const libraryActive = pathname === '/library' || pathname.startsWith('/library/');
   const chatActive = isChatRoute(pathname);
   const pipelineActive = isPipelineRoute(pathname);
 
   const startNewSession = () => navigate('/session');
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => logout(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
+      navigate('/library');
+    },
+  });
 
   return (
     <>
@@ -58,10 +71,31 @@ export function AppSidebar() {
         <div className="app-nav-stack">
           <NavItem to="/library" active={libraryActive} label="书库" icon={<LibraryIcon />} />
           <NavItem to="/chat" active={chatActive} label="聊天" icon={<ChatBubbleIcon />} />
-          <NavItem to="/pipeline" active={pipelineActive} label="流水线" icon={<PipelineIcon />} />
+          {mode === 'user' ? (
+            <NavItem to="/pipeline" active={pipelineActive} label="流水线" icon={<PipelineIcon />} />
+          ) : null}
         </div>
 
         <div className="app-sidebar-bottom">
+          <div className="app-sidebar-auth">
+            {mode === 'user' ? (
+              <>
+                <p className="muted mono">{meQuery.data?.user?.username || 'user'}</p>
+                <button
+                  type="button"
+                  className="soft-button"
+                  onClick={() => logoutMutation.mutate()}
+                  disabled={logoutMutation.isPending}
+                >
+                  退出
+                </button>
+              </>
+            ) : (
+              <Link className="soft-button" to="/login">
+                登录
+              </Link>
+            )}
+          </div>
           <button
             type="button"
             className="app-sidebar-action"
@@ -86,7 +120,9 @@ export function AppSidebar() {
         >
           <PlusIcon />
         </button>
-        <NavItem to="/pipeline" active={pipelineActive} label="流水线" icon={<PipelineIcon />} />
+        {mode === 'user' ? (
+          <NavItem to="/pipeline" active={pipelineActive} label="流水线" icon={<PipelineIcon />} />
+        ) : null}
       </nav>
     </>
   );

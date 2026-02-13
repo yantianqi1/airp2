@@ -39,6 +39,8 @@ ENV/
 # Project specific
 data/input/*.txt
 !data/input/示例小说.txt
+data/*.sqlite3
+data/*.db
 data/chapters/
 data/scenes/
 data/annotated/

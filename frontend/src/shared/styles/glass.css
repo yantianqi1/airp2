@@ -216,8 +216,17 @@
 .app-sidebar-bottom {
   width: 100%;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
   padding-top: var(--space-1);
+}
+
+.app-sidebar-auth {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .app-sidebar-action,

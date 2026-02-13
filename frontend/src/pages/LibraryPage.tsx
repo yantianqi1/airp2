@@ -2,8 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createSessionId } from '../shared/lib/session';
-import { createNovel, deleteNovel, getJob, getJobLogs, listNovels, runPipeline, uploadNovel } from '../shared/api/novels';
-import type { NovelEntry } from '../shared/types/novels';
+import { getMe } from '../shared/api/auth';
+import { createNovel, deleteNovel, getJob, getJobLogs, listNovels, listPublicNovels, runPipeline, updateNovel, uploadNovel } from '../shared/api/novels';
+import type { NovelEntry, PublicNovelEntry } from '../shared/types/novels';
 
 function formatBytes(bytes?: number): string {
   if (!bytes || bytes <= 0) {
@@ -41,11 +42,13 @@ function NovelCard({
   onUploaded,
   onJobStarted,
   onDeleted,
+  onUpdated,
 }: {
   novel: NovelEntry;
   onUploaded: () => void;
   onJobStarted: () => void;
   onDeleted: () => void;
+  onUpdated: () => void;
 }) {
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -94,11 +97,20 @@ function NovelCard({
     onSuccess: () => onDeleted(),
   });
 
+  const visibilityMutation = useMutation({
+    mutationFn: async () => {
+      const next = novel.visibility === 'public' ? 'private' : 'public';
+      return updateNovel(novel.novel_id, { visibility: next });
+    },
+    onSuccess: () => onUpdated(),
+  });
+
   const hasSource = Boolean(novel.source?.filename);
   const job = jobQuery.data;
   const jobStatus = job?.status || '';
   const progressPct = Math.round(Math.max(0, Math.min(1, job?.progress ?? 0)) * 100);
-  const busy = uploadMutation.isPending || runMutation.isPending || deleteMutation.isPending;
+  const busy =
+    uploadMutation.isPending || runMutation.isPending || deleteMutation.isPending || visibilityMutation.isPending;
 
   const openChat = () => {
     const sessionId = createSessionId();
@@ -120,6 +132,9 @@ function NovelCard({
           <p className="muted novel-sub">
             <span className={`status-chip status-${novel.status || 'unknown'}`}>
               {statusLabel(novel.status)}
+            </span>
+            <span className={`status-chip status-${novel.visibility === 'public' ? 'ready' : 'created'}`}>
+              {novel.visibility === 'public' ? '公开' : '私有'}
             </span>
             <span className="mono">ID: {novel.novel_id}</span>
           </p>
@@ -199,6 +214,14 @@ function NovelCard({
         <button
           type="button"
           className="soft-button"
+          onClick={() => visibilityMutation.mutate()}
+          disabled={busy}
+        >
+          {novel.visibility === 'public' ? '设为私有' : '公开'}
+        </button>
+        <button
+          type="button"
+          className="soft-button"
           onClick={() => setShowLogs((value) => !value)}
           disabled={!jobId}
         >
@@ -223,14 +246,67 @@ function NovelCard({
   );
 }
 
+function PublicNovelCard({ novel }: { novel: PublicNovelEntry }) {
+  const navigate = useNavigate();
+  const openChat = () => {
+    const sessionId = createSessionId();
+    navigate(`/novels/${encodeURIComponent(novel.novel_id)}/chat/${encodeURIComponent(sessionId)}`);
+  };
+
+  return (
+    <article className="glass-panel novel-card">
+      <header className="novel-card-head">
+        <div>
+          <p className="label">Public Novel</p>
+          <h2 className="novel-title">{novel.title || novel.novel_id}</h2>
+          <p className="muted novel-sub">
+            <span className={`status-chip status-${novel.status || 'unknown'}`}>{statusLabel(novel.status)}</span>
+            <span className="mono">ID: {novel.novel_id}</span>
+          </p>
+        </div>
+        <div className="novel-actions">
+          <button type="button" className="primary-button" onClick={openChat}>
+            进入聊天
+          </button>
+        </div>
+      </header>
+      <div className="novel-meta grid-2">
+        <div className="meta-box">
+          <p className="label">Updated</p>
+          <p className="muted mono">{novel.updated_at || '-'}</p>
+        </div>
+        <div className="meta-box">
+          <p className="label">Access</p>
+          <p className="muted">公开只读</p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export function LibraryPage() {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState('');
+  const [tab, setTab] = useState<'mine' | 'public'>('mine');
+
+  const meQuery = useQuery({
+    queryKey: ['me'],
+    queryFn: getMe,
+    retry: 0,
+  });
+  const mode = meQuery.data?.mode || 'guest';
 
   const novelsQuery = useQuery({
     queryKey: ['novels'],
     queryFn: listNovels,
     refetchInterval: 2000,
+    enabled: mode === 'user',
+  });
+
+  const publicNovelsQuery = useQuery({
+    queryKey: ['publicNovels'],
+    queryFn: listPublicNovels,
+    refetchInterval: 8000,
   });
 
   const createMutation = useMutation({
@@ -242,6 +318,9 @@ export function LibraryPage() {
   });
 
   const novels = useMemo(() => novelsQuery.data || [], [novelsQuery.data]);
+  const publicNovels = useMemo(() => publicNovelsQuery.data || [], [publicNovelsQuery.data]);
+
+  const activeTab = mode === 'user' ? tab : 'public';
 
   return (
     <div className="library-wrap">
@@ -249,44 +328,73 @@ export function LibraryPage() {
         <div>
           <p className="label">Novel Library</p>
           <h1 className="library-title">多小说工作台</h1>
-          <p className="muted">上传 txt，启动 Step1~5 处理，并按小说进入 RP Chat。</p>
+          <p className="muted">
+            {mode === 'user'
+              ? '上传 txt，启动 Step1~5 处理，并按小说进入 RP Chat。'
+              : '游客模式：可聊天；登录后可导入与管理你的小说。'}
+          </p>
         </div>
-        <form
-          className="library-create"
-          onSubmit={(event) => {
-            event.preventDefault();
-            createMutation.mutate();
-          }}
-        >
-          <label className="sr-only" htmlFor="novel-title">
-            Novel title
-          </label>
-          <input
-            id="novel-title"
-            className="glass-input"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="输入小说标题（可选）"
-          />
-          <button type="submit" className="primary-button" disabled={createMutation.isPending}>
-            新建
-          </button>
-        </form>
+        {mode === 'user' ? (
+          <form
+            className="library-create"
+            onSubmit={(event) => {
+              event.preventDefault();
+              createMutation.mutate();
+            }}
+          >
+            <label className="sr-only" htmlFor="novel-title">
+              Novel title
+            </label>
+            <input
+              id="novel-title"
+              className="glass-input"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="输入小说标题（可选）"
+            />
+            <button type="submit" className="primary-button" disabled={createMutation.isPending}>
+              新建
+            </button>
+          </form>
+        ) : null}
       </header>
 
-      {novelsQuery.isError ? (
+      {mode === 'user' && novelsQuery.isError ? (
         <section className="glass-panel error-box" role="alert">
           无法加载小说库，请检查后端是否运行在 `http://localhost:8011` 或设置 `VITE_API_BASE_URL`。
         </section>
       ) : null}
 
-      {novelsQuery.isLoading ? <section className="glass-panel empty-state">加载中...</section> : null}
+      {activeTab === 'mine' && novelsQuery.isLoading ? (
+        <section className="glass-panel empty-state">加载中...</section>
+      ) : null}
 
-      {!novelsQuery.isLoading && novels.length === 0 ? (
+      {activeTab === 'mine' && !novelsQuery.isLoading && novels.length === 0 ? (
         <section className="glass-panel empty-state">还没有小说。先点右上角新建一个。</section>
       ) : null}
 
-      {novels.length ? (
+      {mode === 'user' ? (
+        <section className="glass-panel library-tabs">
+          <div className="novel-toolbar">
+            <button
+              type="button"
+              className={`soft-button${activeTab === 'mine' ? ' is-active' : ''}`}
+              onClick={() => setTab('mine')}
+            >
+              我的小说
+            </button>
+            <button
+              type="button"
+              className={`soft-button${activeTab === 'public' ? ' is-active' : ''}`}
+              onClick={() => setTab('public')}
+            >
+              公共库
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === 'mine' && novels.length ? (
         <section className="library-grid">
           {novels.map((novel) => (
             <NovelCard
@@ -295,9 +403,33 @@ export function LibraryPage() {
               onUploaded={() => queryClient.invalidateQueries({ queryKey: ['novels'] })}
               onJobStarted={() => queryClient.invalidateQueries({ queryKey: ['novels'] })}
               onDeleted={() => queryClient.invalidateQueries({ queryKey: ['novels'] })}
+              onUpdated={() => queryClient.invalidateQueries({ queryKey: ['novels'] })}
             />
           ))}
         </section>
+      ) : null}
+
+      {activeTab === 'public' ? (
+        <>
+          {publicNovelsQuery.isError ? (
+            <section className="glass-panel error-box" role="alert">
+              无法加载公共库，请稍后重试。
+            </section>
+          ) : null}
+          {publicNovelsQuery.isLoading ? (
+            <section className="glass-panel empty-state">加载中...</section>
+          ) : null}
+          {!publicNovelsQuery.isLoading && publicNovels.length === 0 ? (
+            <section className="glass-panel empty-state">公共库暂无可用小说。</section>
+          ) : null}
+          {publicNovels.length ? (
+            <section className="library-grid">
+              {publicNovels.map((novel) => (
+                <PublicNovelCard key={novel.novel_id} novel={novel} />
+              ))}
+            </section>
+          ) : null}
+        </>
       ) : null}
     </div>
   );

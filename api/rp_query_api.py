@@ -9,12 +9,15 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from services.guardrails import Guardrails
-from services.novel_registry import NovelRegistry
+from services.auth_service import Actor, AuthService
+from services.db import Database
+from services.novels_service import NovelsService
 from services.pipeline_jobs import PipelineJobsService
 from services.pipeline_runner import PipelineRunner, PipelineRunSpec
 from services.query_understanding import QueryUnderstandingService
 from services.retrieval_orchestrator import RetrievalOrchestrator
 from services.session_state import SessionStateStore
+from services.storage_layout import StorageLayout
 from services.worldbook_builder import WorldbookBuilder
 from utils.llm_client import LLMClient
 
@@ -76,9 +79,11 @@ class RPQueryService:
         unlocked_chapter: Optional[int] = None,
         active_characters: Optional[List[str]] = None,
         recent_messages: Optional[List[Dict[str, str]]] = None,
+        session_store: Optional[SessionStateStore] = None,
     ) -> Dict[str, Any]:
-        state = self.session_store.load(session_id, default_unlocked=unlocked_chapter or 0)
-        self.session_store.apply_runtime_updates(
+        store = session_store or self.session_store
+        state = store.load(session_id, default_unlocked=unlocked_chapter or 0)
+        store.apply_runtime_updates(
             state,
             unlocked_chapter=unlocked_chapter,
             active_characters=active_characters,
@@ -102,9 +107,9 @@ class RPQueryService:
 
         worldbook_context, citations = self.worldbook_builder.build(ranked_candidates, understanding)
 
-        self.session_store.append_turn(state, role="user", content=message)
-        self.session_store.remember_entities(state, understanding.entities)
-        self.session_store.save(state)
+        store.append_turn(state, role="user", content=message)
+        store.remember_entities(state, understanding.entities)
+        store.save(state)
 
         return {
             "session_id": session_id,
@@ -123,6 +128,7 @@ class RPQueryService:
         unlocked_chapter: Optional[int] = None,
         active_characters: Optional[List[str]] = None,
         recent_messages: Optional[List[Dict[str, str]]] = None,
+        session_store: Optional[SessionStateStore] = None,
     ) -> Dict[str, Any]:
         if worldbook_context is None or citations is None:
             context_resp = self.query_context(
@@ -131,13 +137,15 @@ class RPQueryService:
                 unlocked_chapter=unlocked_chapter,
                 active_characters=active_characters,
                 recent_messages=recent_messages,
+                session_store=session_store,
             )
             worldbook_context = context_resp["worldbook_context"]
             citations = context_resp["citations"]
 
         citations = citations or []
-        state = self.session_store.load(session_id, default_unlocked=unlocked_chapter or 0)
-        self.session_store.apply_runtime_updates(
+        store = session_store or self.session_store
+        state = store.load(session_id, default_unlocked=unlocked_chapter or 0)
+        store.apply_runtime_updates(
             state,
             unlocked_chapter=unlocked_chapter,
             active_characters=active_characters,
@@ -146,12 +154,12 @@ class RPQueryService:
         # Avoid duplicate user turns when query_context has already recorded the same message.
         last_turn = state.turns[-1] if state.turns else {}
         if not (last_turn.get("role") == "user" and last_turn.get("content") == message):
-            self.session_store.append_turn(state, role="user", content=message)
+            store.append_turn(state, role="user", content=message)
 
         if not self.guardrails.has_enough_evidence(citations):
             fallback_reply = "未检索到明确证据，请补充人物、地点或章节范围后重试。"
-            self.session_store.append_turn(state, role="assistant", content=fallback_reply)
-            self.session_store.save(state)
+            store.append_turn(state, role="assistant", content=fallback_reply)
+            store.save(state)
             return {
                 "assistant_reply": fallback_reply,
                 "citations": citations,
@@ -172,8 +180,8 @@ class RPQueryService:
 
         final_reply = self.guardrails.append_citation_footer(str(reply), citations)
 
-        self.session_store.append_turn(state, role="assistant", content=final_reply)
-        self.session_store.save(state)
+        store.append_turn(state, role="assistant", content=final_reply)
+        store.save(state)
 
         return {
             "assistant_reply": final_reply,
@@ -181,8 +189,9 @@ class RPQueryService:
             "worldbook_context": worldbook_context,
         }
 
-    def get_session(self, session_id: str) -> Dict[str, Any]:
-        state = self.session_store.load(session_id)
+    def get_session(self, session_id: str, session_store: Optional[SessionStateStore] = None) -> Dict[str, Any]:
+        store = session_store or self.session_store
+        state = store.load(session_id)
         return state.to_dict()
 
     def _fallback_reply(self, message: str, worldbook_context: Dict[str, Any]) -> str:
@@ -204,9 +213,9 @@ class RPQueryService:
 class MultiNovelRPQueryService:
     """Route RP queries to a per-novel RPQueryService instance (cached)."""
 
-    def __init__(self, base_config: Dict[str, Any], registry: Optional[NovelRegistry] = None):
+    def __init__(self, base_config: Dict[str, Any], novels: Optional[NovelsService] = None):
         self.base_config = base_config
-        self.registry = registry
+        self.novels = novels
         self._lock = threading.Lock()
         self._services: Dict[str, RPQueryService] = {}
         self._default_service: Optional[RPQueryService] = None
@@ -225,10 +234,10 @@ class MultiNovelRPQueryService:
             return self._default_service
 
     def _build_service_for_novel(self, novel_id: str) -> RPQueryService:
-        if self.registry is None:
+        if self.novels is None:
             return self._get_default()
 
-        paths = self.registry.paths(novel_id)
+        paths = self.novels.paths(novel_id)
         config = dict(self.base_config)
         config_paths = dict((self.base_config.get("paths") or {}))
         config_paths.update(
@@ -240,15 +249,11 @@ class MultiNovelRPQueryService:
                 "profiles_dir": paths["profiles_dir"],
                 "vector_db_path": paths["vector_db_path"],
                 "log_dir": paths["log_dir"],
-                "sessions_dir": paths["sessions_dir"],
             }
         )
         config["paths"] = config_paths
 
-        return RPQueryService(
-            config=config,
-            session_store=SessionStateStore(base_dir=paths["sessions_dir"]),
-        )
+        return RPQueryService(config=config)
 
     def get_service(self, novel_id: Optional[str]) -> RPQueryService:
         novel_id = str(novel_id or "").strip()
@@ -261,8 +266,8 @@ class MultiNovelRPQueryService:
                 return cached
 
         # Ensure novel exists (outside lock to avoid blocking other callers).
-        if self.registry is not None:
-            self.registry.get(novel_id)
+        if self.novels is not None:
+            self.novels.get(novel_id)
 
         service = self._build_service_for_novel(novel_id)
         with self._lock:
@@ -275,14 +280,15 @@ class MultiNovelRPQueryService:
     def respond(self, novel_id: Optional[str], **kwargs: Any) -> Dict[str, Any]:
         return self.get_service(novel_id).respond(**kwargs)
 
-    def get_session(self, novel_id: Optional[str], session_id: str) -> Dict[str, Any]:
-        return self.get_service(novel_id).get_session(session_id)
+    def get_session(self, novel_id: Optional[str], session_id: str, **kwargs: Any) -> Dict[str, Any]:
+        return self.get_service(novel_id).get_session(session_id, **kwargs)
 
 
 def create_app(config_file: str = "config.yaml"):
     """Create FastAPI app lazily so dependency stays optional."""
     try:
-        from fastapi import FastAPI, File, HTTPException, UploadFile
+        from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
+        from fastapi.middleware.cors import CORSMiddleware
         from fastapi.responses import FileResponse
     except ImportError as exc:  # pragma: no cover - optional runtime path
         raise RuntimeError(
@@ -296,82 +302,236 @@ def create_app(config_file: str = "config.yaml"):
     vector_db_root = str(base_config.get("paths", {}).get("vector_db_path") or "/app/vector_db")
     logs_root = str(base_config.get("paths", {}).get("log_dir") or "/app/logs")
 
-    registry = NovelRegistry(data_root=data_root, vector_db_root=vector_db_root, logs_root=logs_root)
-    rp_router = MultiNovelRPQueryService(base_config=base_config, registry=registry)
+    db_path = str(base_config.get("paths", {}).get("db_path") or os.path.join(data_root, "airp2.sqlite3"))
+    db = Database(path=db_path)
+    db.init_schema()
 
-    runner = PipelineRunner(base_config=base_config, registry=registry)
-    jobs_dir = os.path.join(data_root, "jobs")
+    layout = StorageLayout(data_root=data_root, vector_db_root=vector_db_root, logs_root=logs_root)
+    novels = NovelsService(db=db, layout=layout)
+
+    auth_cfg = dict(base_config.get("auth", {}) or {})
+    auth = AuthService(
+        db=db,
+        cookie_name=str(auth_cfg.get("cookie_name", "airp_sid")),
+        user_session_days=int(auth_cfg.get("user_session_days", 30) or 30),
+        guest_session_days=int(auth_cfg.get("guest_session_days", 30) or 30),
+    )
+
+    rp_router = MultiNovelRPQueryService(base_config=base_config, novels=novels)
+    runner = PipelineRunner(base_config=base_config, novels=novels, layout=layout)
 
     def _on_job_update(job):
         try:
             if job.status in {"queued", "running"}:
-                registry.update(job.novel_id, status="processing", last_job_id=job.job_id, last_error="")
+                novels.set_processing(job.novel_id, job.job_id)
             elif job.status == "succeeded":
-                registry.update(
-                    job.novel_id,
-                    status="ready",
-                    last_job_id=job.job_id,
-                    last_error="",
-                    stats=job.result or {},
-                )
+                novels.set_ready(job.novel_id, job.job_id, job.result or {})
                 rp_router.invalidate(job.novel_id)
             elif job.status == "failed":
-                registry.update(
-                    job.novel_id,
-                    status="failed",
-                    last_job_id=job.job_id,
-                    last_error=job.error,
-                )
+                novels.set_failed(job.novel_id, job.job_id, job.error)
                 rp_router.invalidate(job.novel_id)
         except Exception:
             pass
 
     jobs = PipelineJobsService(
-        jobs_dir=jobs_dir,
+        db=db,
         runner=runner,
+        novels=novels,
         max_concurrent_jobs=1,
         on_job_update=_on_job_update,
     )
     app = FastAPI(title="RP Query API", version="1.0.0")
 
+    web_cfg = dict(base_config.get("web", {}) or {})
+    cors_origins = list(web_cfg.get("cors_origins") or [])
+    if not cors_origins:
+        cors_origins = ["http://localhost:5173"]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    cookie_secure = bool(auth_cfg.get("cookie_secure", False))
+    cookie_samesite = str(auth_cfg.get("cookie_samesite", "lax") or "lax")
+
+    def _set_session_cookie(response: Response, token: str, max_age_days: int) -> None:
+        response.set_cookie(
+            key=auth.cookie_name,
+            value=str(token),
+            httponly=True,
+            samesite=cookie_samesite,
+            secure=cookie_secure,
+            path="/",
+            max_age=int(max_age_days) * 24 * 60 * 60,
+        )
+
+    def _delete_session_cookie(response: Response) -> None:
+        response.delete_cookie(key=auth.cookie_name, path="/")
+
+    def get_or_create_actor(request: Request, response: Response) -> Actor:
+        token = request.cookies.get(auth.cookie_name)
+        actor = auth.actor_from_token(token)
+        if actor is None:
+            new_token, session = auth.create_guest_session()
+            _set_session_cookie(response, new_token, auth.guest_session_days)
+            return Actor(type="guest", guest_id=session.get("guest_id"))
+        auth.touch_session(token)
+        return actor
+
+    def require_user(actor: Actor = Depends(get_or_create_actor)) -> Actor:
+        if not actor.is_user:
+            raise HTTPException(status_code=401, detail="login required")
+        return actor
+
+    def _session_store(actor: Actor, novel_id: Optional[str]) -> SessionStateStore:
+        if actor.is_user:
+            base_dir = layout.sessions_scope_dir(user_id=actor.user_id, novel_id=novel_id or None)
+        else:
+            guest_id = actor.guest_id or "anonymous"
+            base_dir = layout.sessions_scope_dir(guest_id=guest_id, novel_id=novel_id or None)
+        os.makedirs(base_dir, exist_ok=True)
+        return SessionStateStore(base_dir=base_dir)
+
+    def _assert_can_read(actor: Actor, novel_id: str) -> None:
+        actor_user_id = actor.user_id if actor.is_user else None
+        try:
+            allowed = novels.can_read(actor_user_id=actor_user_id, novel_id=novel_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        if not allowed:
+            raise HTTPException(status_code=404, detail="novel not found")
+
+    def _assert_owner(actor: Actor, novel_id: str):
+        if not actor.is_user:
+            raise HTTPException(status_code=401, detail="login required")
+        try:
+            return novels.assert_owner(actor.user_id or "", novel_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="forbidden")
+
+    @app.post("/api/v1/auth/register")
+    def register(payload: Dict[str, Any], response: Response):
+        try:
+            username = payload["username"]
+            password = payload["password"]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"missing field: {exc.args[0]}")
+        try:
+            user = auth.register(username=username, password=password)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        token, _session = auth.create_user_session(user["id"])
+        _set_session_cookie(response, token, auth.user_session_days)
+        return {"mode": "user", "user": {"id": user["id"], "username": user["username"]}}
+
+    @app.post("/api/v1/auth/login")
+    def login(payload: Dict[str, Any], response: Response):
+        try:
+            username = payload["username"]
+            password = payload["password"]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"missing field: {exc.args[0]}")
+        user = auth.authenticate(username=username, password=password)
+        if not user:
+            raise HTTPException(status_code=401, detail="invalid username or password")
+        token, _session = auth.create_user_session(user["id"])
+        _set_session_cookie(response, token, auth.user_session_days)
+        return {"mode": "user", "user": {"id": user["id"], "username": user["username"]}}
+
+    @app.post("/api/v1/auth/logout")
+    def logout(request: Request, response: Response):
+        token = request.cookies.get(auth.cookie_name)
+        if token:
+            auth.revoke_session(token)
+        _delete_session_cookie(response)
+        return {"ok": True}
+
+    @app.get("/api/v1/auth/me")
+    def me(actor: Actor = Depends(get_or_create_actor)):
+        if actor.is_user:
+            return {"mode": "user", "user": {"id": actor.user_id, "username": actor.username}}
+        return {"mode": "guest", "guest_id": actor.guest_id}
+
+    @app.post("/api/v1/auth/guest")
+    def ensure_guest(actor: Actor = Depends(get_or_create_actor)):
+        # Calling this endpoint allows frontend to explicitly ensure a guest cookie exists.
+        return {"mode": "guest", "guest_id": actor.guest_id}
+
     @app.get("/api/v1/novels")
-    def list_novels():
-        return registry.list()
+    def list_novels(actor: Actor = Depends(require_user)):
+        return novels.list_by_owner(actor.user_id or "")
 
     @app.post("/api/v1/novels")
-    def create_novel(payload: Dict[str, Any]):
+    def create_novel(payload: Dict[str, Any], actor: Actor = Depends(require_user)):
         title = str(payload.get("title", "") or "")
-        return registry.create(title=title)
+        return novels.create(owner_user_id=actor.user_id or "", title=title)
+
+    @app.get("/api/v1/public/novels")
+    def list_public_novels():
+        return novels.list_public()
+
+    @app.get("/api/v1/public/novels/{novel_id}")
+    def get_public_novel(novel_id: str):
+        try:
+            record = novels.get(novel_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        if record.visibility != "public":
+            raise HTTPException(status_code=404, detail="novel not found")
+        return record.to_public_dict()
 
     @app.get("/api/v1/novels/{novel_id}")
-    def get_novel(novel_id: str):
+    def get_novel(novel_id: str, actor: Actor = Depends(get_or_create_actor)):
         try:
-            entry = registry.get(novel_id)
+            record = novels.get(novel_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
-        entry["paths"] = registry.paths(novel_id)
-        return entry
+        if actor.is_user and actor.user_id == record.owner_user_id:
+            return record.to_entry_dict()
+        if record.visibility == "public":
+            return record.to_public_dict()
+        raise HTTPException(status_code=404, detail="novel not found")
+
+    @app.patch("/api/v1/novels/{novel_id}")
+    def update_novel(novel_id: str, payload: Dict[str, Any], actor: Actor = Depends(require_user)):
+        try:
+            return novels.update(
+                owner_user_id=actor.user_id or "",
+                novel_id=novel_id,
+                title=payload.get("title"),
+                visibility=payload.get("visibility"),
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="forbidden")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
     @app.delete("/api/v1/novels/{novel_id}")
-    def delete_novel(novel_id: str, delete_vector_db: bool = False):
+    def delete_novel(novel_id: str, delete_vector_db: bool = False, actor: Actor = Depends(require_user)):
         try:
-            registry.delete(novel_id, delete_vector_db=bool(delete_vector_db))
+            novels.delete(actor.user_id or "", novel_id, delete_vector_db=bool(delete_vector_db))
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="forbidden")
         return {"deleted": True, "novel_id": novel_id}
 
     @app.post("/api/v1/novels/{novel_id}/upload")
-    async def upload_novel(novel_id: str, file: UploadFile = File(...)):
-        try:
-            registry.get(novel_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc))
+    async def upload_novel(novel_id: str, actor: Actor = Depends(require_user), file: UploadFile = File(...)):
+        _assert_owner(actor, novel_id)
 
         filename = str(getattr(file, "filename", "") or "")
         if not filename.lower().endswith(".txt"):
             raise HTTPException(status_code=400, detail="only .txt files are supported")
 
-        paths = registry.paths(novel_id)
+        paths = novels.paths(novel_id)
         os.makedirs(paths["input_dir"], exist_ok=True)
         dst_path = paths["source_file"]
 
@@ -403,32 +563,26 @@ def create_app(config_file: str = "config.yaml"):
         except Exception:
             pass
 
-        registry.update(novel_id, status="uploaded", source=meta, last_error="")
+        novels.update_source_meta(actor.user_id or "", novel_id, meta)
         rp_router.invalidate(novel_id)
 
         return {"uploaded": True, "novel_id": novel_id, "source": meta}
 
     @app.get("/api/v1/novels/{novel_id}/source")
-    def get_novel_source(novel_id: str):
-        try:
-            entry = registry.get(novel_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc))
+    def get_novel_source(novel_id: str, actor: Actor = Depends(require_user)):
+        entry = _assert_owner(actor, novel_id).to_entry_dict()
 
-        paths = registry.paths(novel_id)
+        paths = novels.paths(novel_id)
         if not os.path.exists(paths["source_file"]):
             raise HTTPException(status_code=404, detail="source not uploaded")
 
         return entry.get("source", {}) or {}
 
     @app.get("/api/v1/novels/{novel_id}/pipeline/chapter-index")
-    def get_pipeline_chapter_index(novel_id: str):
-        try:
-            registry.get(novel_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc))
+    def get_pipeline_chapter_index(novel_id: str, actor: Actor = Depends(require_user)):
+        _assert_owner(actor, novel_id)
 
-        paths = registry.paths(novel_id)
+        paths = novels.paths(novel_id)
         index_file = os.path.join(paths["chapters_dir"], "chapter_index.json")
         if not os.path.exists(index_file):
             raise HTTPException(status_code=404, detail="chapter index not found (run step1 first)")
@@ -440,11 +594,8 @@ def create_app(config_file: str = "config.yaml"):
             raise HTTPException(status_code=500, detail=f"failed to read chapter index: {exc}")
 
     @app.post("/api/v1/novels/{novel_id}/pipeline/run")
-    def run_pipeline(novel_id: str, payload: Dict[str, Any]):
-        try:
-            registry.get(novel_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc))
+    def run_pipeline(novel_id: str, payload: Dict[str, Any], actor: Actor = Depends(require_user)):
+        _assert_owner(actor, novel_id)
 
         step = payload.get("step")
         if step is not None:
@@ -468,7 +619,7 @@ def create_app(config_file: str = "config.yaml"):
             redo_chapter=redo_chapter,
         )
 
-        paths = registry.paths(novel_id)
+        paths = novels.paths(novel_id)
         os.makedirs(paths["log_dir"], exist_ok=True)
         job_id = uuid.uuid4().hex
         log_path = os.path.join(paths["log_dir"], f"job_{job_id}.log")
@@ -480,56 +631,100 @@ def create_app(config_file: str = "config.yaml"):
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
-        registry.update(novel_id, status="processing", last_job_id=job.job_id, last_error="")
         return job.to_dict()
 
     @app.get("/api/v1/jobs/{job_id}")
-    def get_job(job_id: str):
+    def get_job(job_id: str, actor: Actor = Depends(require_user)):
         try:
-            return jobs.get(job_id).to_dict()
+            job = jobs.get(job_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
+        if job.owner_user_id and job.owner_user_id != (actor.user_id or ""):
+            raise HTTPException(status_code=404, detail="job not found")
+        return job.to_dict()
 
     @app.get("/api/v1/jobs/{job_id}/logs")
-    def get_job_logs(job_id: str, lines: int = 200):
+    def get_job_logs(job_id: str, lines: int = 200, actor: Actor = Depends(require_user)):
         lines = max(1, min(int(lines or 200), 2000))
         try:
-            text = jobs.tail_logs(job_id, lines=lines)
+            job = jobs.get(job_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
+        if job.owner_user_id and job.owner_user_id != (actor.user_id or ""):
+            raise HTTPException(status_code=404, detail="job not found")
+        text = jobs.tail_logs(job_id, lines=lines)
         return {"job_id": job_id, "lines": lines, "text": text}
 
     @app.post("/api/v1/rp/query-context")
-    def query_context(payload: Dict[str, Any]):
+    def query_context(payload: Dict[str, Any], actor: Actor = Depends(get_or_create_actor)):
         try:
             message = payload["message"]
             session_id = payload["session_id"]
         except KeyError as exc:
             raise HTTPException(status_code=400, detail=f"missing field: {exc.args[0]}")
 
+        novel_id = payload.get("novel_id")
+        if novel_id:
+            _assert_can_read(actor, str(novel_id))
+
+        store = _session_store(actor, str(novel_id) if novel_id else None)
         try:
             return rp_router.query_context(
-                payload.get("novel_id"),
+                novel_id,
                 message=message,
                 session_id=session_id,
                 unlocked_chapter=payload.get("unlocked_chapter"),
                 active_characters=payload.get("active_characters"),
                 recent_messages=payload.get("recent_messages"),
+                session_store=store,
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
 
     @app.post("/api/v1/rp/respond")
-    def respond(payload: Dict[str, Any]):
+    def respond(payload: Dict[str, Any], actor: Actor = Depends(get_or_create_actor)):
         try:
             message = payload["message"]
             session_id = payload["session_id"]
         except KeyError as exc:
             raise HTTPException(status_code=400, detail=f"missing field: {exc.args[0]}")
 
+        novel_id = payload.get("novel_id")
+        if novel_id:
+            _assert_can_read(actor, str(novel_id))
+        store = _session_store(actor, str(novel_id) if novel_id else None)
+
+        # Guest/no-novel mode: allow LLM chat without RAG evidence.
+        if not novel_id:
+            llm_client = LLMClient(base_config)
+            state = store.load(session_id, default_unlocked=int(payload.get("unlocked_chapter") or 0))
+            recent = payload.get("recent_messages")
+            history = recent if isinstance(recent, list) else state.turns[-10:]
+            store.append_turn(state, role="user", content=str(message))
+            system_prompt = "你是 AIRP 的聊天助手。无需引用证据，回答要清晰、有帮助。"
+            user_prompt = "对话上下文：\n"
+            for turn in history[-10:]:
+                role = str(turn.get("role") or "")
+                content = str(turn.get("content") or "")
+                if role and content:
+                    user_prompt += f"- {role}: {content}\n"
+            user_prompt += f"\n用户：{message}\n助手："
+            try:
+                reply = llm_client.call(prompt=user_prompt, system_prompt=system_prompt, temperature=0.7)
+            except Exception as exc:
+                reply = f"请求失败：{exc}"
+            final = str(reply)
+            store.append_turn(state, role="assistant", content=final)
+            store.save(state)
+            return {
+                "assistant_reply": final,
+                "citations": [],
+                "worldbook_context": {"facts": [], "character_state": [], "timeline_notes": [], "forbidden": []},
+            }
+
         try:
             return rp_router.respond(
-                payload.get("novel_id"),
+                novel_id,
                 message=message,
                 session_id=session_id,
                 worldbook_context=payload.get("worldbook_context"),
@@ -537,14 +732,18 @@ def create_app(config_file: str = "config.yaml"):
                 unlocked_chapter=payload.get("unlocked_chapter"),
                 active_characters=payload.get("active_characters"),
                 recent_messages=payload.get("recent_messages"),
+                session_store=store,
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
 
     @app.get("/api/v1/rp/session/{session_id}")
-    def get_session(session_id: str, novel_id: Optional[str] = None):
+    def get_session(session_id: str, novel_id: Optional[str] = None, actor: Actor = Depends(get_or_create_actor)):
+        if novel_id:
+            _assert_can_read(actor, str(novel_id))
+        store = _session_store(actor, str(novel_id) if novel_id else None)
         try:
-            return rp_router.get_session(novel_id, session_id)
+            return rp_router.get_session(novel_id, session_id, session_store=store)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
 

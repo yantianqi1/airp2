@@ -8,6 +8,7 @@ export interface NovelSourceMeta {
 export interface NovelEntry {
   novel_id: string;
   title: string;
+  visibility?: string;
   status: string;
   created_at: string;
   updated_at: string;
@@ -15,6 +16,13 @@ export interface NovelEntry {
   stats: Record<string, unknown>;
   last_job_id?: string;
   last_error?: string;
+}
+
+export interface PublicNovelEntry {
+  novel_id: string;
+  title: string;
+  status: string;
+  updated_at: string;
 }
 
 export interface NovelDetail extends NovelEntry {

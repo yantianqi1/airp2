@@ -5,6 +5,7 @@ import type {
   JobLogsResponse,
   NovelDetail,
   NovelEntry,
+  PublicNovelEntry,
   PipelineJob,
 } from '../types/novels';
 
@@ -20,6 +21,7 @@ const novelSourceSchema = z
 const novelEntrySchema = z.object({
   novel_id: z.string(),
   title: z.string().optional().default(''),
+  visibility: z.string().optional().default('private'),
   status: z.string().optional().default(''),
   created_at: z.string().optional().default(''),
   updated_at: z.string().optional().default(''),
@@ -31,6 +33,13 @@ const novelEntrySchema = z.object({
 
 const novelDetailSchema = novelEntrySchema.extend({
   paths: z.record(z.string()).optional().default({}),
+});
+
+const publicNovelEntrySchema = z.object({
+  novel_id: z.string(),
+  title: z.string().optional().default(''),
+  status: z.string().optional().default(''),
+  updated_at: z.string().optional().default(''),
 });
 
 const pipelineJobSchema = z.object({
@@ -73,6 +82,11 @@ export async function listNovels(): Promise<NovelEntry[]> {
   return z.array(novelEntrySchema).parse(response.data);
 }
 
+export async function listPublicNovels(): Promise<PublicNovelEntry[]> {
+  const response = await apiClient.get('/api/v1/public/novels');
+  return z.array(publicNovelEntrySchema).parse(response.data);
+}
+
 export async function getNovel(novelId: string): Promise<NovelDetail> {
   const response = await apiClient.get(`/api/v1/novels/${encodeURIComponent(novelId)}`);
   return novelDetailSchema.parse(response.data);
@@ -80,6 +94,14 @@ export async function getNovel(novelId: string): Promise<NovelDetail> {
 
 export async function createNovel(title: string): Promise<NovelEntry> {
   const response = await apiClient.post('/api/v1/novels', { title });
+  return novelEntrySchema.parse(response.data);
+}
+
+export async function updateNovel(
+  novelId: string,
+  payload: { title?: string; visibility?: 'private' | 'public' },
+): Promise<NovelEntry> {
+  const response = await apiClient.patch(`/api/v1/novels/${encodeURIComponent(novelId)}`, payload);
   return novelEntrySchema.parse(response.data);
 }
 

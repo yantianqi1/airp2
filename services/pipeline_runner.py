@@ -15,7 +15,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from .novel_registry import NovelRegistry
+from .novels_service import NovelsService
+from .storage_layout import StorageLayout
 
 
 logger = logging.getLogger(__name__)
@@ -59,9 +60,10 @@ class PipelineRunSpec:
 
 
 class PipelineRunner:
-    def __init__(self, base_config: Dict[str, Any], registry: NovelRegistry):
+    def __init__(self, base_config: Dict[str, Any], novels: NovelsService, layout: StorageLayout):
         self.base_config = base_config
-        self.registry = registry
+        self.novels = novels
+        self.layout = layout
 
     @staticmethod
     def _count_profile_files(profiles_dir: str) -> int:
@@ -78,7 +80,8 @@ class PipelineRunner:
         cfg = copy.deepcopy(self.base_config)
         cfg.setdefault("paths", {})
 
-        paths = self.registry.paths(novel_id)
+        record = self.novels.get(novel_id)
+        paths = self.layout.user_novel_paths(record.owner_user_id, record.novel_id)
         cfg["paths"]["input_file"] = paths["source_file"]
         cfg["paths"]["chapters_dir"] = paths["chapters_dir"]
         cfg["paths"]["scenes_dir"] = paths["scenes_dir"]

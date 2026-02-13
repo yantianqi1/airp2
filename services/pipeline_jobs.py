@@ -1,4 +1,4 @@
-"""Pipeline job manager (MVP: single-process background thread)."""
+"""Pipeline job manager (MVP: single-process background thread + SQLite persistence)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
 
 from .pipeline_runner import PipelineRunSpec, PipelineRunner
+from .db import Database, utc_now
+from .novels_service import NovelsService
 
 
 def _utc_now() -> str:
@@ -21,6 +23,7 @@ def _utc_now() -> str:
 class PipelineJob:
     job_id: str
     novel_id: str
+    owner_user_id: str = ""
     status: str = "queued"  # queued|running|succeeded|failed
     current_step: Optional[int] = None
     progress: float = 0.0  # 0..1
@@ -38,6 +41,7 @@ class PipelineJob:
         return cls(
             job_id=str(data.get("job_id", "")),
             novel_id=str(data.get("novel_id", "")),
+            owner_user_id=str(data.get("owner_user_id", "")),
             status=str(data.get("status", "queued")),
             current_step=data.get("current_step"),
             progress=float(data.get("progress", 0.0) or 0.0),
@@ -67,30 +71,62 @@ class PipelineJobsService:
 
     def __init__(
         self,
-        jobs_dir: str,
+        db: Database,
         runner: PipelineRunner,
+        novels: NovelsService,
         max_concurrent_jobs: int = 1,
         on_job_update: Optional[Callable[[PipelineJob], None]] = None,
     ):
-        self.jobs_dir = jobs_dir
+        self.db = db
         self.runner = runner
+        self.novels = novels
         self.max_concurrent_jobs = max(1, int(max_concurrent_jobs or 1))
         self.on_job_update = on_job_update
         self._lock = threading.Lock()
         self._running_job_id: Optional[str] = None
-        os.makedirs(self.jobs_dir, exist_ok=True)
-
-    def _path(self, job_id: str) -> str:
-        safe_id = str(job_id).replace("/", "_").replace("\\", "_")
-        return os.path.join(self.jobs_dir, f"{safe_id}.json")
+        # Best-effort cleanup of stale "running" jobs (service restart).
+        try:
+            self.db.execute(
+                "UPDATE pipeline_jobs SET status='failed', error=? WHERE status IN ('queued','running');",
+                ("job aborted due to service restart",),
+            )
+        except Exception:
+            pass
 
     def _save(self, job: PipelineJob) -> None:
-        path = self._path(job.job_id)
-        # Use a unique temp file to avoid cross-thread collisions.
-        tmp_path = f"{path}.{uuid.uuid4().hex}.tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(job.to_dict(), f, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, path)
+        payload = job.to_dict()
+        self.db.execute(
+            """
+            INSERT INTO pipeline_jobs (id, novel_id, owner_user_id, spec, status, current_step, progress, started_at, finished_at, created_at, log_path, error, result)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+              novel_id=excluded.novel_id,
+              owner_user_id=excluded.owner_user_id,
+              status=excluded.status,
+              current_step=excluded.current_step,
+              progress=excluded.progress,
+              started_at=excluded.started_at,
+              finished_at=excluded.finished_at,
+              log_path=excluded.log_path,
+              error=excluded.error,
+              result=excluded.result;
+            """,
+            (
+                payload["job_id"],
+                payload["novel_id"],
+                payload.get("owner_user_id", "") or "",
+                json.dumps({}, ensure_ascii=False),  # spec is stored only at creation
+                payload["status"],
+                payload.get("current_step"),
+                float(payload.get("progress") or 0.0),
+                payload.get("started_at") or "",
+                payload.get("finished_at") or "",
+                payload.get("started_at") or utc_now(),  # keep non-empty
+                payload.get("log_path") or "",
+                payload.get("error") or "",
+                json.dumps(payload.get("result") or {}, ensure_ascii=False),
+            ),
+        )
         if self.on_job_update:
             try:
                 self.on_job_update(job)
@@ -98,12 +134,27 @@ class PipelineJobsService:
                 pass
 
     def get(self, job_id: str) -> PipelineJob:
-        path = self._path(job_id)
-        if not os.path.exists(path):
+        row = self.db.query_one("SELECT * FROM pipeline_jobs WHERE id = ?;", (str(job_id or ""),))
+        if not row:
             raise KeyError(f"job not found: {job_id}")
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return PipelineJob.from_dict(data)
+        result = {}
+        try:
+            result = json.loads(row.get("result") or "{}") if isinstance(row.get("result"), str) else {}
+        except Exception:
+            result = {}
+        return PipelineJob(
+            job_id=str(row.get("id") or ""),
+            novel_id=str(row.get("novel_id") or ""),
+            owner_user_id=str(row.get("owner_user_id") or ""),
+            status=str(row.get("status") or "queued"),
+            current_step=row.get("current_step"),
+            progress=float(row.get("progress") or 0.0),
+            started_at=str(row.get("started_at") or ""),
+            finished_at=str(row.get("finished_at") or ""),
+            log_path=str(row.get("log_path") or ""),
+            error=str(row.get("error") or ""),
+            result=result if isinstance(result, dict) else {},
+        )
 
     def start(
         self,
@@ -116,6 +167,8 @@ class PipelineJobsService:
         if not novel_id:
             raise ValueError("novel_id is empty")
 
+        record = self.novels.get(novel_id)
+
         with self._lock:
             if self._running_job_id is not None:
                 running = self.get(self._running_job_id)
@@ -124,8 +177,41 @@ class PipelineJobsService:
                 self._running_job_id = None
 
             allocated_job_id = str(job_id or "").strip() or uuid.uuid4().hex
-            job = PipelineJob(job_id=allocated_job_id, novel_id=novel_id, log_path=log_path)
-            self._save(job)
+            job = PipelineJob(
+                job_id=allocated_job_id,
+                novel_id=novel_id,
+                owner_user_id=record.owner_user_id,
+                log_path=log_path,
+            )
+
+            now = utc_now()
+            self.db.execute(
+                """
+                INSERT INTO pipeline_jobs (id, novel_id, owner_user_id, spec, status, current_step, progress, started_at, finished_at, created_at, log_path, error, result)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+                """,
+                (
+                    job.job_id,
+                    job.novel_id,
+                    job.owner_user_id,
+                    json.dumps(asdict(spec), ensure_ascii=False),
+                    job.status,
+                    job.current_step,
+                    float(job.progress),
+                    "",
+                    "",
+                    now,
+                    job.log_path,
+                    "",
+                    "{}",
+                ),
+            )
+
+            if self.on_job_update:
+                try:
+                    self.on_job_update(job)
+                except Exception:
+                    pass
             self._running_job_id = allocated_job_id
 
             thread = threading.Thread(target=self._run_job_thread, args=(job, spec), daemon=True)
