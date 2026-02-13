@@ -2,11 +2,11 @@ FROM node:22-alpine AS frontend-builder
 
 WORKDIR /frontend
 
-COPY frontend/package.json /frontend/package.json
+COPY frontend/package.json frontend/package-lock.json /frontend/
 ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
-RUN npm install
+RUN npm ci
 
 COPY frontend /frontend
 
