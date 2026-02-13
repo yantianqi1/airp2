@@ -401,6 +401,322 @@
   gap: var(--space-2);
 }
 
+.library-shell {
+  min-height: 100dvh;
+  padding: 1.2rem;
+}
+
+.library-wrap {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.library-head {
+  padding: var(--space-4);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.library-title {
+  margin: 0.35rem 0 0;
+  font-size: clamp(1.65rem, 3.2vw, 2.25rem);
+  letter-spacing: -0.02em;
+}
+
+.library-create {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: min(520px, 100%);
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--space-3);
+}
+
+.novel-card {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.novel-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.novel-title {
+  margin: 0.3rem 0 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+}
+
+.novel-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.mono {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Fira Code', monospace;
+  overflow-wrap: anywhere;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(47, 112, 240, 0.22);
+  background: rgba(47, 112, 240, 0.08);
+  color: #234a88;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.status-chip::before {
+  content: '';
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: rgba(47, 112, 240, 0.65);
+  box-shadow: 0 0 0 3px rgba(47, 112, 240, 0.12);
+}
+
+.status-processing {
+  border-color: rgba(242, 169, 59, 0.3);
+  background: rgba(242, 169, 59, 0.12);
+  color: #764406;
+}
+
+.status-processing::before {
+  background: rgba(242, 169, 59, 0.85);
+  box-shadow: 0 0 0 3px rgba(242, 169, 59, 0.15);
+}
+
+.status-ready {
+  border-color: rgba(44, 181, 157, 0.28);
+  background: rgba(44, 181, 157, 0.1);
+  color: #0f574a;
+}
+
+.status-ready::before {
+  background: rgba(44, 181, 157, 0.92);
+  box-shadow: 0 0 0 3px rgba(44, 181, 157, 0.14);
+}
+
+.status-failed {
+  border-color: rgba(232, 107, 86, 0.34);
+  background: rgba(232, 107, 86, 0.1);
+  color: #8a2312;
+}
+
+.status-failed::before {
+  background: rgba(232, 107, 86, 0.92);
+  box-shadow: 0 0 0 3px rgba(232, 107, 86, 0.14);
+}
+
+.novel-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.novel-meta.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.meta-box {
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(145, 167, 211, 0.26);
+  padding: 0.75rem 0.85rem;
+}
+
+.meta-line {
+  margin: 0.2rem 0 0.3rem;
+}
+
+.progress-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(145, 167, 211, 0.26);
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(50, 118, 255, 0.92), rgba(44, 181, 157, 0.92));
+}
+
+.novel-toolbar {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.danger-button {
+  border-color: rgba(232, 107, 86, 0.34);
+  color: #8a2312;
+}
+
+.danger-button:hover {
+  border-color: rgba(232, 107, 86, 0.55);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.error-inline {
+  margin: 0;
+  color: #8a2312;
+}
+
+.log-box {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(145, 167, 211, 0.26);
+  border-radius: var(--radius-sm);
+  padding: 0.8rem;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.pipeline-head .muted {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.pipeline-controls,
+.pipeline-failures,
+.pipeline-chapters,
+.pipeline-logs {
+  padding: var(--space-4);
+}
+
+.pipeline-toolbar {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.pipeline-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 160px;
+}
+
+.pipeline-field .label {
+  margin: 0;
+}
+
+.pipeline-toggle {
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.6rem;
+  background: rgba(255, 255, 255, 0.34);
+  border: 1px solid rgba(145, 167, 211, 0.26);
+}
+
+.pipeline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+
+.step-card {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.step-title {
+  margin: 0.2rem 0 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.pipeline-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+
+.pipeline-log-controls {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.chapter-table-wrap {
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(145, 167, 211, 0.26);
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.chapter-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.chapter-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  color: var(--text-3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid rgba(145, 167, 211, 0.26);
+  background: rgba(255, 255, 255, 0.55);
+  position: sticky;
+  top: 0;
+}
+
+.chapter-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid rgba(145, 167, 211, 0.18);
+}
+
+.chapter-row-failed td {
+  background: rgba(232, 107, 86, 0.06);
+  color: #7a2f23;
+}
+
+.pipeline-result {
+  margin-top: var(--space-3);
+}
+
 .error-box {
   border-color: rgba(232, 107, 86, 0.5);
   color: #8a2312;
@@ -486,5 +802,18 @@
 
   .entry-actions button {
     width: 100%;
+  }
+
+  .library-create {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .library-create button {
+    width: 100%;
+  }
+
+  .novel-meta.grid-2 {
+    grid-template-columns: 1fr;
   }
 }

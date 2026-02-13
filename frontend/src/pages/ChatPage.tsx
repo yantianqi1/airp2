@@ -28,8 +28,12 @@ function normalizeError(error: unknown): string {
 }
 
 export function ChatPage() {
-  const { sessionId: routeSessionId } = useParams<{ sessionId: string }>();
+  const { sessionId: routeSessionId, novelId: routeNovelId } = useParams<{
+    sessionId: string;
+    novelId?: string;
+  }>();
   const sessionId = routeSessionId?.trim() || '';
+  const novelId = routeNovelId?.trim() || undefined;
   const hydratedRef = useRef(false);
   const [mobilePanel, setMobilePanel] = useState<'session' | 'evidence' | 'debug' | null>(null);
 
@@ -64,11 +68,11 @@ export function ChatPage() {
     }
     hydratedRef.current = false;
     setSessionId(sessionId);
-  }, [sessionId, setSessionId]);
+  }, [sessionId, novelId, setSessionId]);
 
   const sessionQuery = useQuery({
-    queryKey: ['session', sessionId],
-    queryFn: () => getSession(sessionId),
+    queryKey: ['session', novelId || 'default', sessionId],
+    queryFn: () => getSession(sessionId, novelId),
     enabled: Boolean(sessionId),
     retry: 1,
   });
@@ -91,6 +95,7 @@ export function ChatPage() {
       return queryContext({
         message,
         session_id: sessionId,
+        novel_id: novelId,
         unlocked_chapter: unlockedChapter,
         active_characters: activeCharacters,
         recent_messages: [...recentMessages, { role: 'user', content: message }],
@@ -129,6 +134,7 @@ export function ChatPage() {
         const contextResult = await queryContext({
           message,
           session_id: sessionId,
+          novel_id: novelId,
           unlocked_chapter: unlockedChapter,
           active_characters: activeCharacters,
           recent_messages: recent,
@@ -142,6 +148,7 @@ export function ChatPage() {
       const response = await respond({
         message,
         session_id: sessionId,
+        novel_id: novelId,
         unlocked_chapter: unlockedChapter,
         active_characters: activeCharacters,
         recent_messages: recent,
@@ -250,6 +257,7 @@ export function ChatPage() {
           <header className="glass-panel chat-head">
             <p className="label">AIRP RP Chat</p>
             <h1>会话：{sessionId}</h1>
+            {novelId ? <p className="muted">小说：{novelId}</p> : null}
             <p className="muted">模式：{debugMode ? '调试模式（检索 + 回答）' : '生产模式（直接回答）'}</p>
           </header>
 

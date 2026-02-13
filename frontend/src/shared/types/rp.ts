@@ -73,6 +73,7 @@ export interface SessionResponse {
 export interface RpRequestBase {
   message: string;
   session_id: string;
+  novel_id?: string;
   unlocked_chapter?: number;
   active_characters?: string[];
   recent_messages?: RecentMessage[];

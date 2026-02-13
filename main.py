@@ -312,9 +312,15 @@ def _resolve_input_file(config, cli_input=None):
     if configured and os.path.exists(configured):
         return configured
 
-    sample = '/app/data/input/示例小说.txt'
-    if os.path.exists(sample):
-        return sample
+    # Prefer a sample file next to configured path (works for both local and container layouts).
+    sample_candidates = []
+    if configured:
+        sample_candidates.append(os.path.join(os.path.dirname(configured), '示例小说.txt'))
+    sample_candidates.extend(['data/input/示例小说.txt', '/app/data/input/示例小说.txt'])
+
+    for sample in sample_candidates:
+        if sample and os.path.exists(sample):
+            return sample
 
     return configured
 

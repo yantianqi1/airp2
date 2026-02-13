@@ -108,16 +108,19 @@
 ### 5.6 会话记忆
 - 短期记忆（最近 10~20 轮）：支持代词消解、延续剧情。
 - 长期记忆（会话摘要）：记录已发生事件、玩家选择、关系变化。
-- 建议持久化：`data/sessions/{session_id}.json`。
+- 建议持久化：
+  - 单小说/默认：`data/sessions/{session_id}.json`
+  - 多小说隔离：`data/novels/<novel_id>/sessions/{session_id}.json`
 
 ### 5.7 调用接口设计
 - `POST /api/v1/rp/query-context`
-  - 输入：`message, session_id, unlocked_chapter, active_characters`
+  - 输入：`message, session_id, novel_id?, unlocked_chapter, active_characters`
   - 输出：`worldbook_context, citations, debug_scores`
 - `POST /api/v1/rp/respond`
-  - 输入：`message + worldbook_context`
+  - 输入：`message + worldbook_context (+ novel_id?)`
   - 输出：`assistant_reply + citations`
 - `GET /api/v1/rp/session/{id}`
+  - 输入：query 参数 `novel_id?`
   - 输出：会话状态与进度
 
 ## 6. 数据模型与索引优化

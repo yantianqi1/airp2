@@ -25,6 +25,7 @@ Novel Text Vectorization Pipeline - 将长篇小说智能切分并向量化，�
 - `PROJECT_STRUCTURE.md`: 项目结构说明
 - `FOLLOWUP_DEVELOPMENT_PLAN.md`: RP后续能力规划
 - `FRONTEND_DEVELOPMENT_PLAN.md`: 前端长期方案（React + TypeScript, Liquid Glass Premium）
+- `NOVEL_LIBRARY_DEVELOPMENT_PLAN.md`: 多小说导入与处理工作台方案（Novel Library + Pipeline UI）
 
 ## 安装
 
@@ -279,13 +280,9 @@ python3 example_rp_query.py \
   --active-character 许七安
 ```
 
-### 3. API 端点（可选 FastAPI）
+### 3. API 端点（FastAPI）
 
-安装可选依赖：
-
-```bash
-pip install fastapi uvicorn
-```
+FastAPI 相关依赖已包含在 `requirements.txt`（`fastapi/uvicorn/python-multipart`）。
 
 启动（示例）：
 
@@ -294,13 +291,28 @@ uvicorn api.rp_query_api:create_app --factory --host 0.0.0.0 --port 8011
 ```
 
 可用端点：
+- `GET /api/v1/novels`
+- `POST /api/v1/novels`
+- `POST /api/v1/novels/{novel_id}/upload`
+- `POST /api/v1/novels/{novel_id}/pipeline/run`
+- `GET /api/v1/jobs/{job_id}`
+- `GET /api/v1/jobs/{job_id}/logs`
 - `POST /api/v1/rp/query-context`
 - `POST /api/v1/rp/respond`
-- `GET /api/v1/rp/session/{id}`
+- `GET /api/v1/rp/session/{id}`（支持 query 参数 `novel_id`）
+
+说明：
+- `rp/query-context` 与 `rp/respond` 支持请求体中传入 `novel_id`，实现“按小说隔离检索与会话”。
 
 ### 4. 前端（React + TypeScript）
 
-项目已新增 `frontend/` 前端工程（会话入口 + RP聊天三栏界面 + 引用/调试面板）。
+项目已新增 `frontend/` 前端工程（Novel Library + RP Chat 三栏界面 + 引用/调试面板）。
+
+方式 A（后端直接托管 `frontend/dist`）：
+- 先执行一次 `npm -C frontend run build` 生成 `frontend/dist`
+- 再启动后端，打开 `http://localhost:8011/`（默认会跳到 `/library`）
+
+方式 B（前端开发模式，Vite）：
 
 ```bash
 cd frontend

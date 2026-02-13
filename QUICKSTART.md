@@ -28,7 +28,28 @@ embedding:
 
 **提示**: 如果使用同一个API服务，可以设置相同的密钥。
 
-### 3. 运行测试检查
+### 3. （可选）启动 Web UI（多小说工作台）
+
+启动后端（提供 API；若本地存在 `frontend/dist` 则同时托管静态页）：
+
+```bash
+uvicorn api.rp_query_api:create_app --factory --host 0.0.0.0 --port 8011
+```
+
+打开：
+- `http://localhost:8011/library`（需要先 `npm -C frontend run build` 生成 `frontend/dist`）
+
+如果你希望前端用 Vite 开发模式运行：
+
+```bash
+npm -C frontend install
+npm -C frontend run dev
+```
+
+打开：
+- `http://localhost:5173/library`
+
+### 4. 运行测试检查
 
 ```bash
 python3 test_setup.py
@@ -39,7 +60,7 @@ python3 test_setup.py
 - ✓ API密钥是否已配置
 - ✓ 示例文件是否存在
 
-### 4. 运行示例
+### 5. 运行示例（CLI）
 
 使用提供的示例小说:
 
@@ -53,7 +74,7 @@ python3 main.py --input data/input/示例小说.txt
 python3 main.py --input data/input/你的小说.txt
 ```
 
-### 5. 查看结果
+### 6. 查看结果
 
 处理完成后，查看以下目录:
 
@@ -67,6 +88,11 @@ cat data/annotated/chapter_0001_annotated.json | head -50
 # 角色档案
 cat data/profiles/*.md
 ```
+
+如果你是通过“多小说工作台”处理的小说，则产物位于：
+- `data/novels/<novel_id>/chapters|scenes|annotated|profiles`
+- `vector_db/<novel_id>`
+- `logs/novels/<novel_id>/`
 
 ## 常用命令
 

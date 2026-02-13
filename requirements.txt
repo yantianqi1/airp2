@@ -5,3 +5,6 @@ chardet
 thefuzz
 python-Levenshtein
 tqdm
+fastapi
+uvicorn
+python-multipart

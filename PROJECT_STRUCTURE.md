@@ -3,13 +3,20 @@
 ## 目录树
 
 ```
-novel-vectorizer/
+airp2/
 │
 ├── 📄 README.md                    # 详细文档
 ├── 📄 QUICKSTART.md                # 快速开始指南
+├── 📄 PROJECT_STRUCTURE.md         # 项目结构说明
+├── 📄 FOLLOWUP_DEVELOPMENT_PLAN.md # RP 后续能力规划
+├── 📄 FRONTEND_DEVELOPMENT_PLAN.md # 前端长期方案（Liquid Glass）
+├── 📄 NOVEL_LIBRARY_DEVELOPMENT_PLAN.md # 多小说工作台方案
+├── 📄 REPAIR_PLAN.md               # 修复计划（幂等/状态机等）
 ├── 📄 config.yaml                  # 配置文件
 ├── 📄 requirements.txt             # Python依赖
 ├── 📄 .gitignore                   # Git忽略规则
+├── 🐳 Dockerfile                   # 容器镜像构建
+├── 🐳 docker-compose.yml           # 运行示例（可按需改为本地 build）
 │
 ├── 🔧 main.py                      # 主流程控制
 ├── 🔧 test_setup.py                # 环境检查脚本
@@ -23,7 +30,10 @@ novel-vectorizer/
 │   ├── step4_vectorize.py         # 阶段4: 向量化入库
 │   └── step5_character_profile.py # 阶段5: 角色档案
 │
-├── 🧠 services/                    # RP查询系统服务层
+├── 🧠 services/                    # RP + 多小说工作台服务层
+│   ├── novel_registry.py           # 多小说注册表/工作区路径管理
+│   ├── pipeline_runner.py          # 在 Novel 工作区内运行 Step1~5
+│   ├── pipeline_jobs.py            # 后台 Job 状态机 + 日志
 │   ├── query_understanding.py      # 查询理解
 │   ├── retrieval_orchestrator.py   # 召回编排
 │   ├── reranker.py                 # 统一重排
@@ -32,8 +42,11 @@ novel-vectorizer/
 │   ├── guardrails.py               # 防幻觉/防剧透
 │   └── retrievers/                 # 多路召回通道
 │
-├── 🌐 api/                         # RP API入口
-│   └── rp_query_api.py             # query-context/respond/session
+├── 🌐 api/                         # API入口
+│   └── rp_query_api.py             # RP + Novels/Jobs API + 静态页托管
+│
+├── 🎨 frontend/                    # React 前端（Library + Chat）
+│   └── src/...
 │
 ├── 🛠️ utils/                       # 工具模块
 │   ├── __init__.py
@@ -49,10 +62,16 @@ novel-vectorizer/
 │   ├── chapters/                  # 章节文本 (生成)
 │   ├── scenes/                    # 场景JSON (生成)
 │   ├── annotated/                 # 标注数据 (生成)
-│   └── profiles/                  # 角色档案 (生成)
+│   ├── profiles/                  # 角色档案 (生成)
+│   ├── novels/                    # 多小说工作区（隔离）
+│   │   ├── index.json             # Novel 注册表
+│   │   └── <novel_id>/...         # 每本小说独立 input/chapters/scenes/...
+│   └── jobs/                      # pipeline job 状态持久化（json）
 │
 ├── 📁 vector_db/                   # 向量数据库 (生成)
+│   └── <novel_id>/...              # 多小说隔离向量库目录（Qdrant local）
 └── 📁 logs/                        # 运行日志 (生成)
+    └── novels/<novel_id>/job_*.log # 多小说 job 日志
 ```
 
 ## 核心文件说明
@@ -75,6 +94,11 @@ novel-vectorizer/
   - 5分钟快速开始
   - 常用命令
   - 故障排查
+
+- **NOVEL_LIBRARY_DEVELOPMENT_PLAN.md**: 多小说工作台方案与里程碑
+- **FRONTEND_DEVELOPMENT_PLAN.md**: 前端长期方案（Liquid Glass Premium）
+- **FOLLOWUP_DEVELOPMENT_PLAN.md**: RP 检索/世界书/防剧透后续规划
+- **REPAIR_PLAN.md**: 主流程幂等与修复项清单
 
 ### 主程序
 

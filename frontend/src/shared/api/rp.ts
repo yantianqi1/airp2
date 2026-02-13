@@ -85,7 +85,9 @@ export async function respond(payload: RespondPayload): Promise<RespondResponse>
   return respondSchema.parse(response.data);
 }
 
-export async function getSession(sessionId: string): Promise<SessionResponse> {
-  const response = await apiClient.get(`/api/v1/rp/session/${encodeURIComponent(sessionId)}`);
+export async function getSession(sessionId: string, novelId?: string): Promise<SessionResponse> {
+  const response = await apiClient.get(`/api/v1/rp/session/${encodeURIComponent(sessionId)}`, {
+    params: novelId ? { novel_id: novelId } : undefined,
+  });
   return sessionSchema.parse(response.data);
 }

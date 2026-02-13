@@ -73,8 +73,11 @@
 ## 4. 信息架构与页面结构
 
 ### 4.1 路由
-- `/`：会话入口（新建 / 恢复）
-- `/chat/:sessionId`：RP 主界面
+- `/`：跳转到 `/library`
+- `/library`：小说库（多小说工作台）
+- `/session`：会话入口（新建 / 恢复，legacy）
+- `/chat/:sessionId`：RP 主界面（legacy）
+- `/novels/:novelId/chat/:sessionId`：RP 主界面（按小说隔离，推荐）
 
 ### 4.2 主界面布局（Desktop）
 - 左栏（20%）：会话控制
