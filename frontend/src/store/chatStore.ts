@@ -22,6 +22,7 @@ interface ChatState {
   latestQueryUnderstanding: Record<string, unknown> | null;
   isSending: boolean;
   errorMessage: string | null;
+  beginSession: (sessionId: string) => void;
   setSessionId: (sessionId: string) => void;
   setUnlockedChapter: (chapter: number) => void;
   setActiveCharacters: (characters: string[]) => void;
@@ -60,6 +61,19 @@ export const useChatStore = create<ChatState>((set) => ({
   latestQueryUnderstanding: null,
   isSending: false,
   errorMessage: null,
+  beginSession: (sessionId) =>
+    set({
+      sessionId,
+      unlockedChapter: 0,
+      activeCharacters: [],
+      messages: [],
+      latestWorldbookContext: null,
+      latestCitations: [],
+      latestDebugScores: null,
+      latestQueryUnderstanding: null,
+      isSending: false,
+      errorMessage: null,
+    }),
   setSessionId: (sessionId) => set({ sessionId }),
   setUnlockedChapter: (chapter) => set({ unlockedChapter: Math.max(0, Math.floor(chapter || 0)) }),
   setActiveCharacters: (characters) => set({ activeCharacters: normalizeCharacterList(characters) }),

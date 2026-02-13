@@ -60,3 +60,43 @@ export function PanelIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function LibraryIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M5 4H19V20H7C5.9 20 5 19.1 5 18V4Z" />
+      <path d="M9 4V20" />
+    </svg>
+  );
+}
+
+export function ChatBubbleIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M21 14C21 16.8 18.8 19 16 19H9L4 21V8C4 5.2 6.2 3 9 3H16C18.8 3 21 5.2 21 8V14Z" />
+      <path d="M8 9H16" />
+      <path d="M8 13H13" />
+    </svg>
+  );
+}
+
+export function PipelineIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...baseProps(props)}>
+      <rect x="4" y="4" width="6" height="6" rx="2" />
+      <rect x="14" y="4" width="6" height="6" rx="2" />
+      <rect x="14" y="14" width="6" height="6" rx="2" />
+      <path d="M10 7H14" />
+      <path d="M17 10V14" />
+    </svg>
+  );
+}
+
+export function PlusIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...baseProps(props)}>
+      <path d="M12 5V19" />
+      <path d="M5 12H19" />
+    </svg>
+  );
+}

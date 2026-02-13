@@ -244,65 +244,61 @@ export function LibraryPage() {
   const novels = useMemo(() => novelsQuery.data || [], [novelsQuery.data]);
 
   return (
-    <div className="library-shell">
-      <div className="library-wrap">
-        <header className="glass-panel library-head">
-          <div>
-            <p className="label">Novel Library</p>
-            <h1 className="library-title">多小说工作台</h1>
-            <p className="muted">上传 txt，启动 Step1~5 处理，并按小说进入 RP Chat。</p>
-          </div>
-          <form
-            className="library-create"
-            onSubmit={(event) => {
-              event.preventDefault();
-              createMutation.mutate();
-            }}
-          >
-            <label className="sr-only" htmlFor="novel-title">
-              Novel title
-            </label>
-            <input
-              id="novel-title"
-              className="glass-input"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="输入小说标题（可选）"
+    <div className="library-wrap">
+      <header className="glass-panel library-head">
+        <div>
+          <p className="label">Novel Library</p>
+          <h1 className="library-title">多小说工作台</h1>
+          <p className="muted">上传 txt，启动 Step1~5 处理，并按小说进入 RP Chat。</p>
+        </div>
+        <form
+          className="library-create"
+          onSubmit={(event) => {
+            event.preventDefault();
+            createMutation.mutate();
+          }}
+        >
+          <label className="sr-only" htmlFor="novel-title">
+            Novel title
+          </label>
+          <input
+            id="novel-title"
+            className="glass-input"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="输入小说标题（可选）"
+          />
+          <button type="submit" className="primary-button" disabled={createMutation.isPending}>
+            新建
+          </button>
+        </form>
+      </header>
+
+      {novelsQuery.isError ? (
+        <section className="glass-panel error-box" role="alert">
+          无法加载小说库，请检查后端是否运行在 `http://localhost:8011` 或设置 `VITE_API_BASE_URL`。
+        </section>
+      ) : null}
+
+      {novelsQuery.isLoading ? <section className="glass-panel empty-state">加载中...</section> : null}
+
+      {!novelsQuery.isLoading && novels.length === 0 ? (
+        <section className="glass-panel empty-state">还没有小说。先点右上角新建一个。</section>
+      ) : null}
+
+      {novels.length ? (
+        <section className="library-grid">
+          {novels.map((novel) => (
+            <NovelCard
+              key={novel.novel_id}
+              novel={novel}
+              onUploaded={() => queryClient.invalidateQueries({ queryKey: ['novels'] })}
+              onJobStarted={() => queryClient.invalidateQueries({ queryKey: ['novels'] })}
+              onDeleted={() => queryClient.invalidateQueries({ queryKey: ['novels'] })}
             />
-            <button type="submit" className="primary-button" disabled={createMutation.isPending}>
-              新建
-            </button>
-          </form>
-        </header>
-
-        {novelsQuery.isError ? (
-          <section className="glass-panel error-box" role="alert">
-            无法加载小说库，请检查后端是否运行在 `http://localhost:8011` 或设置 `VITE_API_BASE_URL`。
-          </section>
-        ) : null}
-
-        {novelsQuery.isLoading ? (
-          <section className="glass-panel empty-state">加载中...</section>
-        ) : null}
-
-        {!novelsQuery.isLoading && novels.length === 0 ? (
-          <section className="glass-panel empty-state">还没有小说。先点右上角新建一个。</section>
-        ) : null}
-
-        {novels.length ? (
-          <section className="library-grid">
-            {novels.map((novel) => (
-              <NovelCard
-                key={novel.novel_id}
-                novel={novel}
-                onUploaded={() => queryClient.invalidateQueries({ queryKey: ['novels'] })}
-                onJobStarted={() => queryClient.invalidateQueries({ queryKey: ['novels'] })}
-                onDeleted={() => queryClient.invalidateQueries({ queryKey: ['novels'] })}
-              />
-            ))}
-          </section>
-        ) : null}
-      </div>
+          ))}
+        </section>
+      ) : null}
     </div>
   );
 }

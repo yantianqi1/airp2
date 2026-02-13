@@ -13,9 +13,10 @@ body,
 body {
   font-family: var(--font-body);
   color: var(--text-1);
-  background: radial-gradient(circle at 10% 8%, rgba(64, 137, 255, 0.16), transparent 28%),
-    radial-gradient(circle at 92% 22%, rgba(56, 208, 188, 0.15), transparent 33%),
-    radial-gradient(circle at 50% 95%, rgba(242, 169, 59, 0.11), transparent 28%),
+  background: radial-gradient(circle at 12% 10%, var(--bloom-brand), transparent 34%),
+    radial-gradient(circle at 90% 18%, var(--bloom-mint), transparent 36%),
+    radial-gradient(circle at 52% 96%, var(--bloom-amber), transparent 32%),
+    radial-gradient(circle at 56% 38%, var(--bloom-lilac), transparent 40%),
     linear-gradient(180deg, var(--bg-0), var(--bg-1) 55%, var(--bg-2));
   line-height: 1.4;
 }
@@ -34,7 +35,7 @@ body::before {
   height: min(52vw, 620px);
   top: -15vw;
   left: -12vw;
-  background: radial-gradient(circle, rgba(61, 124, 253, 0.18), rgba(61, 124, 253, 0));
+  background: radial-gradient(circle, var(--bloom-brand), transparent);
 }
 
 body::after {
@@ -42,7 +43,7 @@ body::after {
   height: min(50vw, 620px);
   right: -12vw;
   bottom: -18vw;
-  background: radial-gradient(circle, rgba(67, 189, 160, 0.16), rgba(67, 189, 160, 0));
+  background: radial-gradient(circle, var(--bloom-mint), transparent);
 }
 
 a {

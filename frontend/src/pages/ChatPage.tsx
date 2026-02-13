@@ -12,6 +12,7 @@ import { DebugIcon, MenuIcon, PanelIcon } from '../shared/components/icons';
 import { getSession, queryContext, respond } from '../shared/api/rp';
 import type { QueryContextResponse, RecentMessage, WorldbookContext } from '../shared/types/rp';
 import { useChatStore } from '../store/chatStore';
+import { LAST_CHAT_KEY } from './ChatResumePage';
 
 function normalizeError(error: unknown): string {
   if (error instanceof AxiosError) {
@@ -48,7 +49,7 @@ export function ChatPage() {
     latestQueryUnderstanding,
     isSending,
     errorMessage,
-    setSessionId,
+    beginSession,
     setUnlockedChapter,
     addActiveCharacter,
     removeActiveCharacter,
@@ -67,8 +68,22 @@ export function ChatPage() {
       return;
     }
     hydratedRef.current = false;
-    setSessionId(sessionId);
-  }, [sessionId, novelId, setSessionId]);
+    beginSession(sessionId);
+  }, [sessionId, novelId, beginSession]);
+
+  useEffect(() => {
+    if (!sessionId) {
+      return;
+    }
+    const resumePath = novelId
+      ? `/novels/${encodeURIComponent(novelId)}/chat/${encodeURIComponent(sessionId)}`
+      : `/chat/${encodeURIComponent(sessionId)}`;
+    try {
+      window.localStorage.setItem(LAST_CHAT_KEY, resumePath);
+    } catch {
+      // ignore storage errors (private mode, etc.)
+    }
+  }, [sessionId, novelId]);
 
   const sessionQuery = useQuery({
     queryKey: ['session', novelId || 'default', sessionId],

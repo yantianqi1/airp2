@@ -1,11 +1,15 @@
 :root {
   color-scheme: light;
-  --bg-0: #f3f6fb;
-  --bg-1: #e6eef8;
-  --bg-2: #dce6f3;
-  --glass-fill: rgba(255, 255, 255, 0.46);
-  --glass-strong: rgba(255, 255, 255, 0.64);
-  --glass-stroke: rgba(255, 255, 255, 0.72);
+  --bg-0: #f4f6ff;
+  --bg-1: #eef5ff;
+  --bg-2: #eaf7f4;
+  --bloom-brand: rgba(50, 118, 255, 0.16);
+  --bloom-mint: rgba(44, 181, 157, 0.15);
+  --bloom-amber: rgba(242, 169, 59, 0.12);
+  --bloom-lilac: rgba(182, 160, 255, 0.14);
+  --glass-fill: rgba(255, 255, 255, 0.44);
+  --glass-strong: rgba(255, 255, 255, 0.66);
+  --glass-stroke: rgba(255, 255, 255, 0.76);
   --text-1: #0f1728;
   --text-2: #3f4d67;
   --text-3: #5f6b84;
@@ -14,6 +18,11 @@
   --mint: #2cb59d;
   --amber: #f2a93b;
   --danger: #e86b56;
+  --text-on-brand: #f8fbff;
+  --brand-ink: #234a88;
+  --amber-ink: #764406;
+  --mint-ink: #0f574a;
+  --danger-ink: #8a2312;
   --shadow-soft: 0 14px 42px rgba(26, 37, 68, 0.14);
   --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.6);
   --radius-xl: 24px;

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import {
   getChapterIndex,
@@ -12,6 +12,7 @@ import {
 } from '../shared/api/novels';
 import { createSessionId } from '../shared/lib/session';
 import type { ChapterIndexEntry, ChapterIndexResponse } from '../shared/types/novels';
+import { LAST_PIPELINE_KEY } from './PipelineResumePage';
 
 function normalizeError(error: unknown): string {
   if (error instanceof AxiosError) {
@@ -93,6 +94,18 @@ export function PipelinePage() {
   const [logLines, setLogLines] = useState('220');
   const [failedOnly, setFailedOnly] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!novelId) {
+      return;
+    }
+    const resumePath = `/novels/${encodeURIComponent(novelId)}/pipeline`;
+    try {
+      window.localStorage.setItem(LAST_PIPELINE_KEY, resumePath);
+    } catch {
+      // ignore storage errors (private mode, etc.)
+    }
+  }, [novelId]);
 
   const novelQuery = useQuery({
     queryKey: ['novel', novelId],
@@ -287,103 +300,100 @@ export function PipelinePage() {
   }
 
   return (
-    <div className="library-shell">
-      <div className="library-wrap">
-        <header className="glass-panel library-head pipeline-head">
-          <div>
-            <p className="label">Pipeline Console</p>
-            <h1 className="library-title">{novel?.title || novelId}</h1>
-            <p className="muted">
-              <span className={`status-chip status-${novel?.status || 'unknown'}`}>
-                {statusLabel(novel?.status || '')}
-              </span>{' '}
-              <span className="mono">ID: {novelId}</span>
-            </p>
-          </div>
-          <div className="novel-actions">
-            <button type="button" className="soft-button" onClick={() => navigate('/library')}>
-              返回库
-            </button>
-            <button type="button" className="soft-button" onClick={openChat} disabled={!hasSource}>
-              进入聊天
-            </button>
-          </div>
-        </header>
+    <div className="library-wrap">
+      <header className="glass-panel library-head pipeline-head">
+        <div>
+          <p className="label">Pipeline Console</p>
+          <h1 className="library-title">{novel?.title || novelId}</h1>
+          <p className="muted">
+            <span className={`status-chip status-${novel?.status || 'unknown'}`}>
+              {statusLabel(novel?.status || '')}
+            </span>{' '}
+            <span className="mono">ID: {novelId}</span>
+          </p>
+        </div>
+        <div className="novel-actions">
+          <button type="button" className="soft-button" onClick={() => navigate('/library')}>
+            返回库
+          </button>
+          <button type="button" className="soft-button" onClick={openChat} disabled={!hasSource}>
+            进入聊天
+          </button>
+        </div>
+      </header>
 
-        {novelQuery.isError ? (
-          <section className="glass-panel error-box" role="alert">
-            {normalizeError(novelQuery.error)}
-          </section>
-        ) : null}
+      {novelQuery.isError ? (
+        <section className="glass-panel error-box" role="alert">
+          {normalizeError(novelQuery.error)}
+        </section>
+      ) : null}
 
-        {actionError ? (
-          <section className="glass-panel error-box" role="alert">
-            {actionError}
-          </section>
-        ) : null}
+      {actionError ? (
+        <section className="glass-panel error-box" role="alert">
+          {actionError}
+        </section>
+      ) : null}
 
-        {novelQuery.isLoading ? (
-          <section className="glass-panel empty-state">加载中...</section>
-        ) : null}
+      {novelQuery.isLoading ? <section className="glass-panel empty-state">加载中...</section> : null}
 
-        {novel ? (
-          <section className="glass-panel pipeline-controls">
-            <div className="novel-meta grid-2">
-              <div className="meta-box">
-                <p className="label">Source</p>
-                <p className="meta-line">
-                  <span className="mono">{novel.source?.filename || '未上传'}</span>
-                </p>
-                <p className="muted">
-                  {formatBytes(novel.source?.bytes)}，{novel.source?.char_count ?? '-'} 字，
-                  {novel.source?.line_count ?? '-'} 行
-                </p>
-              </div>
-              <div className="meta-box">
-                <p className="label">Job</p>
-                <p className="meta-line">
-                  <span className="mono">{jobId || '-'}</span>
-                </p>
-                <p className="muted">
-                  {jobStatus
-                    ? `状态：${jobStatus}，Step：${job?.current_step ?? '-'}，进度：${progressPct}%`
-                    : '暂无作业'}
-                </p>
-              </div>
+      {novel ? (
+        <section className="glass-panel pipeline-controls">
+          <div className="novel-meta grid-2">
+            <div className="meta-box">
+              <p className="label">Source</p>
+              <p className="meta-line">
+                <span className="mono">{novel.source?.filename || '未上传'}</span>
+              </p>
+              <p className="muted">
+                {formatBytes(novel.source?.bytes)}，{novel.source?.char_count ?? '-'} 字，
+                {novel.source?.line_count ?? '-'} 行
+              </p>
             </div>
+            <div className="meta-box">
+              <p className="label">Job</p>
+              <p className="meta-line">
+                <span className="mono">{jobId || '-'}</span>
+              </p>
+              <p className="muted">
+                {jobStatus
+                  ? `状态：${jobStatus}，Step：${job?.current_step ?? '-'}，进度：${progressPct}%`
+                  : '暂无作业'}
+              </p>
+            </div>
+          </div>
 
-            {jobStatus ? (
-              <div className="progress-track" aria-label="job progress">
-                <div className="progress-bar" style={{ width: `${progressPct}%` }} />
-              </div>
-            ) : null}
+          {jobStatus ? (
+            <div className="progress-track" aria-label="job progress">
+              <div className="progress-bar" style={{ width: `${progressPct}%` }} />
+            </div>
+          ) : null}
 
-            {job?.error ? <p className="muted error-inline">错误：{job.error}</p> : null}
-            {novel.last_error ? <p className="muted error-inline">记录：{novel.last_error}</p> : null}
+          {job?.error ? <p className="muted error-inline">错误：{job.error}</p> : null}
+          {novel.last_error ? <p className="muted error-inline">记录：{novel.last_error}</p> : null}
 
-            <div className="pipeline-toolbar">
-              <input
-                ref={fileRef}
-                className="sr-only"
-                type="file"
-                accept=".txt,text/plain"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = '';
-                  if (!file) {
-                    return;
-                  }
-                  uploadMutation.mutate(file);
-                }}
-              />
-              <button
-                type="button"
-                className="soft-button"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploadMutation.isPending || runMutation.isPending}
-              >
-                上传 txt
-              </button>
+          <div className="pipeline-toolbar">
+            <input
+              ref={fileRef}
+              className="sr-only"
+              type="file"
+              accept=".txt,text/plain"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (!file) {
+                  return;
+                }
+                uploadMutation.mutate(file);
+              }}
+            />
+            <button
+              type="button"
+              className="soft-button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploadMutation.isPending || runMutation.isPending}
+            >
+              上传 txt
+            </button>
 
               <label className="pipeline-field">
                 <span className="label">Step</span>
@@ -430,9 +440,9 @@ export function PipelinePage() {
               >
                 运行
               </button>
-            </div>
-          </section>
-        ) : null}
+          </div>
+        </section>
+      ) : null}
 
         <section className="pipeline-grid">
           <article className="glass-panel step-card">
@@ -617,8 +627,6 @@ export function PipelinePage() {
             ) : null}
           </section>
         ) : null}
-      </div>
     </div>
   );
 }
-
